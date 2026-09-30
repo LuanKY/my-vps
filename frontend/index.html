@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VPS Monitor - Telemetria em Tempo Real</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              500: '#22c55e',
+              600: '#16a34a',
+            },
+            surface: {
+              card: '#1e293b',
+              cardHover: '#273549',
+              dark: '#0f172a',
+              border: '#334155',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#0f172a] text-slate-100 min-h-screen font-sans antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-surface-border bg-slate-900/80 backdrop-blur sticky top-0 z-40 px-4 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+          VPS Real-Time Telemetry
+          <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">v1.0.0</span>
+        </h1>
+        <p class="text-xs text-slate-400" id="uptime-display">Uptime: <span class="text-slate-300 font-mono">--</span></p>
+      </div>
+    </div>
+
+    <!-- Status de Conexão WebSocket -->
+    <div class="flex items-center gap-3 text-sm">
+      <div id="status-pill" class="flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 text-xs font-medium transition-colors">
+        <span id="status-indicator" class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+        </span>
+        <span id="status-text">Conectando...</span>
+      </div>
+      <span id="last-update" class="text-xs text-slate-500 font-mono">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- Conteúdo Principal -->
+  <main class="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-6">
+
+    <!-- Grid de Métricas Principais (Cards) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <!-- Card CPU -->
+      <div class="bg-surface-card border border-surface-border rounded-2xl p-5 hover:border-slate-600 transition-all shadow-lg flex flex-col justify-between">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Processador</span>
+          <span id="cpu-core-count" class="text-xs text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700 font-mono">0 vCPUs</span>
+        </div>
+        <div>
+          <div class="flex items-baseline gap-2 mb-2">
+            <span id="cpu-total" class="text-3xl font-extrabold font-mono text-white">0%</span>
+            <span id="cpu-load" class="text-xs text-slate-400 font-mono">Load: - / - / -</span>
+          </div>
+          <!-- Barra de progresso -->
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
+            <div id="cpu-bar" class="h-2 rounded-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Memória RAM -->
+      <div class="bg-surface-card border border-surface-border rounded-2xl p-5 hover:border-slate-600 transition-all shadow-lg flex flex-col justify-between">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Memória RAM</span>
+          <span id="ram-ratio" class="text-xs text-slate-400 font-mono">0 / 0 GB</span>
+        </div>
+        <div>
+          <div class="flex items-baseline justify-between mb-2">
+            <span id="ram-percent" class="text-3xl font-extrabold font-mono text-white">0%</span>
+            <span id="swap-info" class="text-xs text-slate-400 font-mono">Swap: 0%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
+            <div id="ram-bar" class="h-2 rounded-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Armazenamento (Root) -->
+      <div class="bg-surface-card border border-surface-border rounded-2xl p-5 hover:border-slate-600 transition-all shadow-lg flex flex-col justify-between">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Disco Raiz (/)</span>
+          <span id="disk-ratio" class="text-xs text-slate-400 font-mono">0 / 0 GB</span>
+        </div>
+        <div>
+          <div class="flex items-baseline justify-between mb-2">
+            <span id="disk-percent" class="text-3xl font-extrabold font-mono text-white">0%</span>
+            <span id="disk-free" class="text-xs text-slate-400 font-mono">Livre: 0 GB</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
+            <div id="disk-bar" class="h-2 rounded-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Docker Overview -->
+      <div class="bg-surface-card border border-surface-border rounded-2xl p-5 hover:border-slate-600 transition-all shadow-lg flex flex-col justify-between">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Docker Engine</span>
+          <span id="docker-status-badge" class="text-xs px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-400 border border-slate-700">Checking...</span>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <div>
+            <div id="docker-running-count" class="text-3xl font-extrabold font-mono text-emerald-400">0</div>
+            <div class="text-xs text-slate-400 mt-1">Containers Rodando</div>
+          </div>
+          <div class="text-right">
+            <div id="docker-stopped-count" class="text-lg font-bold font-mono text-slate-400">0</div>
+            <div class="text-xs text-slate-500">Parados / Pausados</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CPU Detalhado (Por Núcleo) e I/O de Rede / Disco -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Detalhamento dos Cores CPU -->
+      <div class="bg-surface-card border border-surface-border rounded-2xl p-5 shadow-lg lg:col-span-2">
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
+          <span>Uso por Núcleo (vCPUs)</span>
+          <span class="text-xs text-slate-500 lowercase">tempo real</span>
+        </h2>
+        <div id="cores-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <!-- Renderizado dinamicamente via JS -->
+          <div class="text-xs text-slate-500 py-4 col-span-full text-center">Aguardando dados...</div>
+        </div>
+      </div>
+
+      <!-- Rede e I/O de Disco -->
+      <div class="bg-surface-card border border-surface-border rounded-2xl p-5 shadow-lg flex flex-col justify-between">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">I/O e Tráfego</h2>
+          
+          <!-- Interfaces de Rede -->
+          <div class="space-y-3 mb-5">
+            <div class="text-xs font-semibold text-slate-400">Adaptadores de Rede</div>
+            <div id="network-interfaces-list" class="space-y-2 max-h-36 overflow-y-auto pr-1">
+              <div class="text-xs text-slate-500">Nenhuma interface detectada.</div>
+            </div>
+          </div>
+
+          <!-- Disco I/O -->
+          <div class="pt-3 border-t border-slate-800">
+            <div class="text-xs font-semibold text-slate-400 mb-2">Operações de Disco (Total)</div>
+            <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div class="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
+                <span class="text-slate-400 block text-[10px] uppercase">Leitura</span>
+                <span id="disk-read-mb" class="text-emerald-400 font-bold text-sm">0 MB</span>
+              </div>
+              <div class="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
+                <span class="text-slate-400 block text-[10px] uppercase">Escrita</span>
+                <span id="disk-write-mb" class="text-blue-400 font-bold text-sm">0 MB</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sessões ativas -->
+        <div class="pt-4 mt-4 border-t border-slate-800 text-xs flex items-center justify-between text-slate-400">
+          <span>Sessões Ativas:</span>
+          <span id="users-count" class="font-mono text-slate-200 font-semibold">0 usuário(s)</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Seção de Containers Docker -->
+    <div class="bg-surface-card border border-surface-border rounded-2xl p-5 shadow-lg">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+          <span>Containers Docker</span>
+          <span id="containers-total-badge" class="px-2 py-0.5 rounded-full text-xs font-mono bg-slate-800 text-slate-300 border border-slate-700">0</span>
+        </h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-300">
+          <thead class="text-xs uppercase bg-slate-800/60 text-slate-400 border-b border-surface-border">
+            <tr>
+              <th scope="col" class="py-2.5 px-3 rounded-l-lg">Nome</th>
+              <th scope="col" class="py-2.5 px-3">Status</th>
+              <th scope="col" class="py-2.5 px-3">Imagem</th>
+              <th scope="col" class="py-2.5 px-3">ID</th>
+              <th scope="col" class="py-2.5 px-3 rounded-r-lg">Portas</th>
+            </tr>
+          </thead>
+          <tbody id="containers-table-body" class="divide-y divide-slate-800/60 font-mono text-xs">
+            <tr>
+              <td colspan="5" class="py-4 text-center text-slate-500 font-sans">Nenhum container em execução ou daemon inacessível.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tabelas de Processos: Top CPU & Top Memória -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Top CPU -->
+      <div class="bg-surface-card border border-surface-border rounded-2xl p-5 shadow-lg">
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
+          <span>Top Processos (CPU)</span>
+          <span class="text-xs text-slate-500 lowercase">Top 10</span>
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300 font-mono">
+            <thead class="uppercase bg-slate-800/60 text-slate-400 border-b border-surface-border">
+              <tr>
+                <th scope="col" class="py-2 px-3 rounded-l-lg">PID</th>
+                <th scope="col" class="py-2 px-3 font-sans">Nome</th>
+                <th scope="col" class="py-2 px-3 text-right">CPU %</th>
+                <th scope="col" class="py-2 px-3 rounded-r-lg text-right">RAM %</th>
+              </tr>
+            </thead>
+            <tbody id="cpu-processes-body" class="divide-y divide-slate-800/60">
+              <tr>
+                <td colspan="4" class="py-3 text-center text-slate-500 font-sans">Aguardando dados...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Top RAM -->
+      <div class="bg-surface-card border border-surface-border rounded-2xl p-5 shadow-lg">
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
+          <span>Top Processos (RAM)</span>
+          <span class="text-xs text-slate-500 lowercase">Top 10</span>
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300 font-mono">
+            <thead class="uppercase bg-slate-800/60 text-slate-400 border-b border-surface-border">
+              <tr>
+                <th scope="col" class="py-2 px-3 rounded-l-lg">PID</th>
+                <th scope="col" class="py-2 px-3 font-sans">Nome</th>
+                <th scope="col" class="py-2 px-3 text-right">RAM %</th>
+                <th scope="col" class="py-2 px-3 rounded-r-lg text-right">CPU %</th>
+              </tr>
+            </thead>
+            <tbody id="memory-processes-body" class="divide-y divide-slate-800/60">
+              <tr>
+                <td colspan="4" class="py-3 text-center text-slate-500 font-sans">Aguardando dados...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

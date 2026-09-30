@@ -5,6 +5,7 @@ import time
 import docker
 import psutil
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect, status
+from fastapi.staticfiles import StaticFiles
 
 from schemas import HealthResponse, SystemMetricsResponse
 
@@ -100,6 +101,13 @@ uptime, Docker container summary, top CPU/memory processes, and active user sess
 # Endpoints
 # ==============================================================================
 
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Health check",
+    description="Returns the operational status of the monitoring service."
+)
 @app.get(
     "/",
     response_model=HealthResponse,
@@ -335,4 +343,18 @@ async def websocket_system_metrics(
             await websocket.close()
         except Exception:
             pass
+
+
+# ==============================================================================
+# Static Frontend Files Mount (Single-port deployment)
+# ==============================================================================
+
+frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/dashboard", StaticFiles(directory=frontend_dir, html=True), name="frontend_dashboard")
+    # Redireciona a raiz "/" para o dashboard se chamado via navegador (HTML)
+    @app.get("/ui", include_in_schema=False)
+    def redirect_to_dashboard():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/dashboard/")
 
