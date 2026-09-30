@@ -105,16 +105,19 @@ function updateStatus(state) {
 function renderDashboard(data) {
   if (!data) return;
 
-  // Atualizar timestamp simples (sem rótulo)
+  // Update simple timestamp (no label)
   const now = new Date();
   if (lastUpdate) {
-    lastUpdate.textContent = now.toLocaleTimeString("pt-BR");
+    lastUpdate.textContent = now.toLocaleTimeString("en-GB", { hour12: false });
   }
 
-  // 1. Uptime
+  // 1. Uptime (sanitizes any prefix to avoid duplication with HTML label)
   if (uptimeDisplay) {
     if (data.uptime && data.uptime.uptime_formatted) {
-      uptimeDisplay.textContent = data.uptime.uptime_formatted;
+      const cleanUptime = String(data.uptime.uptime_formatted)
+        .replace(/^uptime:\s*/i, "")
+        .trim();
+      uptimeDisplay.textContent = cleanUptime;
     } else {
       uptimeDisplay.textContent = "--";
     }
@@ -152,15 +155,19 @@ function renderDashboard(data) {
     renderCpuCores([]);
   }
 
+  // Load average: apenas os números separados por vírgula
   if (data.load_average && data.load_average.last_1m !== undefined) {
     if (cpuLoad) {
-      cpuLoad.textContent = `${data.load_average.last_1m.toFixed(2)}, ${data.load_average.last_5m.toFixed(2)}, ${data.load_average.last_15m.toFixed(2)}`;
+      const l1 = Number(data.load_average.last_1m).toFixed(2);
+      const l5 = Number(data.load_average.last_5m).toFixed(2);
+      const l15 = Number(data.load_average.last_15m).toFixed(2);
+      cpuLoad.textContent = `${l1}, ${l5}, ${l15}`;
     }
   } else if (cpuLoad) {
     cpuLoad.textContent = "- / - / -";
   }
 
-  // 3. Memory & Swap
+  // 3. Memory & Swap (apenas números e frações)
   const ramPercent = document.getElementById("ram-percent");
   const ramRatio = document.getElementById("ram-ratio");
   const ramBar = document.getElementById("ram-bar");
@@ -200,7 +207,7 @@ function renderDashboard(data) {
     }
   }
 
-  // 4. Disk
+  // 4. Disk (apenas números e frações)
   const diskPercent = document.getElementById("disk-percent");
   const diskRatio = document.getElementById("disk-ratio");
   const diskFree = document.getElementById("disk-free");
@@ -253,10 +260,14 @@ function renderDashboard(data) {
       }
     }
 
-    if (runningCount) runningCount.textContent = d.summary?.running ?? 0;
-    if (stoppedCount) stoppedCount.textContent = d.summary?.stopped ?? 0;
-    if (totalBadge) totalBadge.textContent = `${d.summary?.total ?? 0} total`;
-    if (dockerSubtext) dockerSubtext.textContent = `containers: ${d.summary?.total ?? 0} total`;
+    const total = d.summary?.total ?? (d.containers ? d.containers.length : 0);
+    const running = d.summary?.running ?? (d.containers ? d.containers.filter(c => c.state === "running").length : 0);
+    const stopped = d.summary?.stopped ?? (total - running);
+
+    if (runningCount) runningCount.textContent = running;
+    if (stoppedCount) stoppedCount.textContent = stopped;
+    if (totalBadge) totalBadge.textContent = `${total} total`;
+    if (dockerSubtext) dockerSubtext.textContent = `containers: ${total} total`;
 
     renderContainersTable(d.containers || [], d.is_running);
   } else {
@@ -284,7 +295,7 @@ function renderDashboard(data) {
     if (writeMb) writeMb.textContent = "0.0 MB";
   }
 
-  // 7. Active sessions
+  // 7. Active sessions (apenas o número)
   const usersCount = document.getElementById("users-count");
   if (usersCount) {
     const count = (data.logged_in_users || []).length;
