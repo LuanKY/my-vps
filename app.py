@@ -1,9 +1,10 @@
+import asyncio
 import datetime
 import os
 import time
 import docker
 import psutil
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect, status
 
 from schemas import HealthResponse, SystemMetricsResponse
 
@@ -309,3 +310,29 @@ def get_computer_data():
         "top_memory_processes": top_memory_processes,
         "logged_in_users": logged_in_users
     }
+
+
+@app.websocket("/ws/data")
+async def websocket_system_metrics(
+    websocket: WebSocket,
+    interval: float = Query(3.0, ge=0.5, le=60.0, description="Interval in seconds between metric updates")
+):
+    """
+    WebSocket endpoint for real-time VPS telemetry streaming.
+    Serializes and delivers metrics validated against SystemMetricsResponse.
+    """
+    await websocket.accept()
+    try:
+        while True:
+            raw_metrics = await asyncio.to_thread(get_computer_data)
+            metrics_payload = SystemMetricsResponse(**raw_metrics).model_dump(mode="json")
+            await websocket.send_json(metrics_payload)
+            await asyncio.sleep(interval)
+    except (WebSocketDisconnect, asyncio.CancelledError):
+        pass
+    except Exception:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
