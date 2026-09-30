@@ -1,29 +1,31 @@
 from .health import HealthResponse
 from .metrics import (
+    CpuMetrics,
     CpuTimes,
-    DiskPartition,
+    DiskIO,
     DiskUsage,
     LoadAverage,
+    LoggedInUser,
     NetworkInterfaceIO,
     ProcessDetail,
-    ProcessThreads,
     SwapMemory,
     SystemMetricsResponse,
-    ThreadDetail,
+    UptimeInfo,
     VirtualMemory,
 )
 
 __all__ = [
     "HealthResponse",
+    "UptimeInfo",
+    "CpuMetrics",
     "CpuTimes",
     "LoadAverage",
     "VirtualMemory",
     "SwapMemory",
-    "DiskPartition",
     "DiskUsage",
+    "DiskIO",
     "NetworkInterfaceIO",
     "ProcessDetail",
-    "ThreadDetail",
-    "ProcessThreads",
+    "LoggedInUser",
     "SystemMetricsResponse",
 ]

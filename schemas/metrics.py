@@ -1,5 +1,24 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class UptimeInfo(BaseModel):
+    """System uptime and boot time metadata."""
+    uptime_seconds: int = Field(
+        ...,
+        description="System uptime duration in seconds",
+        examples=[345600]
+    )
+    uptime_formatted: str = Field(
+        ...,
+        description="Human-readable system uptime representation",
+        examples=["4d 2h 15m"]
+    )
+    boot_time: str = Field(
+        ...,
+        description="ISO 8601 timestamp of the last system boot event",
+        examples=["2026-09-26T08:45:00+00:00"]
+    )
 
 
 class CpuTimes(BaseModel):
@@ -20,6 +39,29 @@ class CpuTimes(BaseModel):
         ...,
         description="Time the CPU spent completely idle (seconds)",
         examples=[984320.0]
+    )
+
+
+class CpuMetrics(BaseModel):
+    """Real-time CPU metrics including per-core utilization and execution breakdown."""
+    total_percent: float = Field(
+        ...,
+        description="Overall CPU utilization percentage across all cores combined (%)",
+        examples=[28.5]
+    )
+    per_core_percent: List[float] = Field(
+        ...,
+        description="Real-time CPU utilization percentage for each individual CPU core / vCPU (%)",
+        examples=[[15.2, 85.0, 4.1, 12.8]]
+    )
+    core_count: int = Field(
+        ...,
+        description="Total number of logical CPU cores (vCPUs) available on the host",
+        examples=[4]
+    )
+    times: CpuTimes = Field(
+        ...,
+        description="Cumulative CPU processing times distribution"
     )
 
 
@@ -99,34 +141,8 @@ class SwapMemory(BaseModel):
     )
 
 
-class DiskPartition(BaseModel):
-    """Mounted filesystem partition details."""
-    model_config = ConfigDict(extra="allow")
-
-    device: str = Field(
-        ...,
-        description="Device name or drive letter (e.g. /dev/sda1 or C:\\)",
-        examples=["/dev/sda1"]
-    )
-    mountpoint: str = Field(
-        ...,
-        description="Path where the partition is mounted in the filesystem hierarchy",
-        examples=["/"]
-    )
-    fstype: str = Field(
-        ...,
-        description="Filesystem format type (e.g. ext4, xfs, NTFS)",
-        examples=["ext4"]
-    )
-    opts: str = Field(
-        ...,
-        description="Mount options applied to this partition",
-        examples=["rw,relatime"]
-    )
-
-
 class DiskUsage(BaseModel):
-    """Storage space capacity and consumption for a filesystem path."""
+    """Storage space capacity and consumption for the root filesystem (/)." """
     model_config = ConfigDict(extra="allow")
 
     total: int = Field(
@@ -148,6 +164,32 @@ class DiskUsage(BaseModel):
         ...,
         description="Percentage of disk capacity consumed (%)",
         examples=[25.0]
+    )
+
+
+class DiskIO(BaseModel):
+    """Cumulative disk read and write I/O metrics."""
+    model_config = ConfigDict(extra="allow")
+
+    read_bytes: int = Field(
+        ...,
+        description="Total bytes read from physical storage disks",
+        examples=[1073741824]
+    )
+    write_bytes: int = Field(
+        ...,
+        description="Total bytes written to physical storage disks",
+        examples=[5368709120]
+    )
+    read_count: int = Field(
+        ...,
+        description="Total count of disk read operations performed",
+        examples=[45120]
+    )
+    write_count: int = Field(
+        ...,
+        description="Total count of disk write operations performed",
+        examples=[89400]
     )
 
 
@@ -201,45 +243,41 @@ class ProcessDetail(BaseModel):
     )
 
 
-class ThreadDetail(BaseModel):
-    """Thread execution metrics."""
+class LoggedInUser(BaseModel):
+    """Details of active user sessions (e.g. SSH logins)."""
     model_config = ConfigDict(extra="allow")
 
-    id: int = Field(
+    name: str = Field(
         ...,
-        description="Operating system Thread Identifier (TID)",
-        examples=[1204]
+        description="System account username",
+        examples=["ubuntu"]
     )
-    user_time: float = Field(
+    terminal: Optional[str] = Field(
+        None,
+        description="Terminal session identifier (e.g. pts/0)",
+        examples=["pts/0"]
+    )
+    host: Optional[str] = Field(
+        None,
+        description="Remote client IP address or hostname",
+        examples=["198.51.100.1"]
+    )
+    started: float = Field(
         ...,
-        description="CPU time spent executing in user mode (seconds)",
-        examples=[0.12]
-    )
-    system_time: float = Field(
-        ...,
-        description="CPU time spent executing in kernel/system mode (seconds)",
-        examples=[0.05]
-    )
-
-
-class ProcessThreads(BaseModel):
-    """Active threads profile for the current API service process."""
-    total_threads: int = Field(
-        ...,
-        description="Total number of active threads spawned by the API process",
-        examples=[4]
-    )
-    threads: List[ThreadDetail] = Field(
-        default_factory=list,
-        description="Individual metrics and identifiers for each active thread"
+        description="UNIX timestamp marking when the session was initiated",
+        examples=[1727690000.0]
     )
 
 
 class SystemMetricsResponse(BaseModel):
     """Comprehensive real-time VPS telemetry schema."""
-    cpu_times: CpuTimes = Field(
+    uptime: UptimeInfo = Field(
         ...,
-        description="Breakdown of CPU processing times"
+        description="System uptime duration, formatted text, and boot timestamp"
+    )
+    cpu: CpuMetrics = Field(
+        ...,
+        description="Real-time CPU metrics, individual per-core usage, and core count"
     )
     load_average: LoadAverage = Field(
         ...,
@@ -253,13 +291,13 @@ class SystemMetricsResponse(BaseModel):
         ...,
         description="Virtual swap space capacity and utilization metrics"
     )
-    disk_partitions: List[DiskPartition] = Field(
-        ...,
-        description="List of active mounted disk partitions"
-    )
     root_storage: DiskUsage = Field(
         ...,
         description="Storage space usage for the root filesystem (/)"
+    )
+    disk_io: Optional[DiskIO] = Field(
+        None,
+        description="Disk input/output activity (bytes and operation counts)"
     )
     network_interfaces: Dict[str, NetworkInterfaceIO] = Field(
         ...,
@@ -273,11 +311,15 @@ class SystemMetricsResponse(BaseModel):
         default_factory=dict,
         description="Cooling fan RPM sensor readings (available on supported Linux hardware)"
     )
+    top_cpu_processes: List[ProcessDetail] = Field(
+        ...,
+        description="Top 10 running system processes consuming the highest percentage of CPU"
+    )
     top_memory_processes: List[ProcessDetail] = Field(
         ...,
         description="Top 10 running system processes consuming the highest percentage of RAM"
     )
-    process_threads: ProcessThreads = Field(
-        ...,
-        description="Thread count and runtime metrics for the monitoring API process"
+    logged_in_users: List[LoggedInUser] = Field(
+        default_factory=list,
+        description="Active terminal/SSH user sessions currently established on the VPS"
     )
