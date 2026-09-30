@@ -1,4 +1,3 @@
-
 // Detecta host e porta automaticamente do navegador ou usa localhost:8000 como fallback
 const hostWithPort = (typeof window !== "undefined" && window.location.host && window.location.host !== "")
   ? window.location.host
@@ -15,11 +14,18 @@ const statusText = document.getElementById("status-text");
 const lastUpdate = document.getElementById("last-update");
 const uptimeDisplay = document.getElementById("uptime-display");
 
-// Helper: Cores baseadas em porcentagem
+// Helper: Cores de status dev/sysadmin
 function getStatusColor(percent) {
-  if (percent >= 85) return { bar: "bg-red-500", text: "text-red-400" };
-  if (percent >= 70) return { bar: "bg-amber-500", text: "text-amber-400" };
-  return { bar: "bg-emerald-500", text: "text-emerald-400" };
+  if (percent === null || percent === undefined || isNaN(percent)) {
+    return { text: "text-slate-400", bar: "bg-slate-700" };
+  }
+  if (percent >= 85) {
+    return { text: "text-rose-400", bar: "bg-rose-400" };
+  }
+  if (percent >= 70) {
+    return { text: "text-amber-300", bar: "bg-amber-400" };
+  }
+  return { text: "text-white", bar: "bg-emerald-400" };
 }
 
 // Conectar ao WebSocket
@@ -30,7 +36,7 @@ function connectWebSocket() {
   try {
     socket = new WebSocket(WS_URL);
   } catch (err) {
-    console.error("Erro ao inicializar WebSocket:", err);
+    console.error("WebSocket init error:", err);
     scheduleReconnect();
     return;
   }
@@ -44,7 +50,7 @@ function connectWebSocket() {
       const data = JSON.parse(event.data);
       renderDashboard(data);
     } catch (err) {
-      console.error("Erro ao parsear dados JSON:", err);
+      console.error("JSON parse error:", err);
     }
   };
 
@@ -54,7 +60,7 @@ function connectWebSocket() {
   };
 
   socket.onerror = (error) => {
-    console.error("WebSocket erro:", error);
+    console.error("WebSocket error:", error);
     updateStatus("error");
   };
 }
@@ -62,7 +68,7 @@ function connectWebSocket() {
 function scheduleReconnect() {
   clearTimeout(reconnectTimer);
   reconnectTimer = setTimeout(() => {
-    console.log("Tentando reconectar WebSocket...");
+    console.log("Reconnecting WebSocket...");
     connectWebSocket();
   }, 3000);
 }
@@ -71,27 +77,27 @@ function scheduleReconnect() {
 function updateStatus(state) {
   if (!statusPill || !statusText || !statusIndicator) return;
 
-  statusPill.className = "flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors";
+  statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-mono transition-colors border";
 
   if (state === "connected") {
-    statusPill.classList.add("border-emerald-500/30", "bg-emerald-500/10", "text-emerald-400");
+    statusPill.className += " bg-[#13161c] border-emerald-500/20 text-emerald-400";
     statusIndicator.innerHTML = `
-      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
     `;
-    statusText.textContent = "Conectado";
+    statusText.textContent = "connected";
   } else if (state === "connecting") {
-    statusPill.classList.add("border-amber-500/30", "bg-amber-500/10", "text-amber-400");
+    statusPill.className += " bg-[#13161c] border-amber-500/20 text-amber-300";
     statusIndicator.innerHTML = `
       <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-      <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+      <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
     `;
-    statusText.textContent = "Conectando...";
+    statusText.textContent = "connecting";
   } else {
-    statusPill.classList.add("border-rose-500/30", "bg-rose-500/10", "text-rose-400");
+    statusPill.className += " bg-[#13161c] border-rose-500/20 text-rose-400";
     statusIndicator.innerHTML = `
-      <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+      <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-400"></span>
     `;
-    statusText.textContent = "Desconectado";
+    statusText.textContent = "disconnected";
   }
 }
 
@@ -99,171 +105,221 @@ function updateStatus(state) {
 function renderDashboard(data) {
   if (!data) return;
 
-  // Atualizar carimbo de data/hora
+  // Atualizar timestamp simples (sem rótulo)
   const now = new Date();
   if (lastUpdate) {
     lastUpdate.textContent = now.toLocaleTimeString("pt-BR");
   }
 
   // 1. Uptime
-  if (data.uptime && uptimeDisplay) {
-    uptimeDisplay.innerHTML = `Uptime: <span class="text-slate-300 font-mono font-semibold">${data.uptime.uptime_formatted}</span>`;
+  if (uptimeDisplay) {
+    if (data.uptime && data.uptime.uptime_formatted) {
+      uptimeDisplay.textContent = data.uptime.uptime_formatted;
+    } else {
+      uptimeDisplay.textContent = "--";
+    }
   }
 
   // 2. CPU Total e Load Average
-  if (data.cpu) {
-    const cpuVal = data.cpu.total_percent ?? 0;
-    const cpuColors = getStatusColor(cpuVal);
+  const cpuEl = document.getElementById("cpu-total");
+  const cpuBar = document.getElementById("cpu-bar");
+  const cpuCoresCount = document.getElementById("cpu-core-count");
+  const cpuLoad = document.getElementById("cpu-load");
 
-    const cpuEl = document.getElementById("cpu-total");
-    const cpuBar = document.getElementById("cpu-bar");
-    const cpuCoresCount = document.getElementById("cpu-core-count");
+  if (data.cpu && data.cpu.total_percent !== undefined && data.cpu.total_percent !== null) {
+    const cpuVal = Number(data.cpu.total_percent);
+    const cpuColors = getStatusColor(cpuVal);
 
     if (cpuEl) {
       cpuEl.textContent = `${cpuVal.toFixed(1)}%`;
-      cpuEl.className = `text-3xl font-extrabold font-mono ${cpuColors.text}`;
+      cpuEl.className = `text-3xl font-semibold tracking-tight font-mono ${cpuColors.text}`;
     }
     if (cpuBar) {
-      cpuBar.style.width = `${Math.min(cpuVal, 100)}%`;
-      cpuBar.className = `h-2 rounded-full transition-all duration-500 ${cpuColors.bar}`;
+      cpuBar.style.width = `${Math.min(100, Math.max(0, cpuVal))}%`;
+      cpuBar.className = `h-1.5 rounded-full transition-all duration-500 ${cpuColors.bar}`;
     }
     if (cpuCoresCount) {
-      cpuCoresCount.textContent = `${data.cpu.core_count} vCPUs`;
+      cpuCoresCount.textContent = `${data.cpu.core_count ?? 0} vCPUs`;
     }
-
-    // Cores Individuais
     renderCpuCores(data.cpu.per_core_percent || []);
-  }
-
-  if (data.load_average) {
-    const cpuLoad = document.getElementById("cpu-load");
-    if (cpuLoad) {
-      cpuLoad.textContent = `Load: ${data.load_average.last_1m.toFixed(2)} / ${data.load_average.last_5m.toFixed(2)} / ${data.load_average.last_15m.toFixed(2)}`;
+  } else {
+    if (cpuEl) {
+      cpuEl.textContent = "--";
+      cpuEl.className = "text-3xl font-semibold tracking-tight font-mono text-slate-500";
     }
+    if (cpuBar) cpuBar.style.width = "0%";
+    if (cpuCoresCount) cpuCoresCount.textContent = "--";
+    renderCpuCores([]);
   }
 
-  // 3. Memória RAM & Swap
-  if (data.virtual_memory) {
+  if (data.load_average && data.load_average.last_1m !== undefined) {
+    if (cpuLoad) {
+      cpuLoad.textContent = `${data.load_average.last_1m.toFixed(2)}, ${data.load_average.last_5m.toFixed(2)}, ${data.load_average.last_15m.toFixed(2)}`;
+    }
+  } else if (cpuLoad) {
+    cpuLoad.textContent = "- / - / -";
+  }
+
+  // 3. Memory & Swap
+  const ramPercent = document.getElementById("ram-percent");
+  const ramRatio = document.getElementById("ram-ratio");
+  const ramBar = document.getElementById("ram-bar");
+  const swapInfo = document.getElementById("swap-info");
+
+  if (data.virtual_memory && data.virtual_memory.percent !== undefined && data.virtual_memory.percent !== null) {
     const ram = data.virtual_memory;
     const ramColors = getStatusColor(ram.percent);
 
-    const ramPercent = document.getElementById("ram-percent");
-    const ramRatio = document.getElementById("ram-ratio");
-    const ramBar = document.getElementById("ram-bar");
-
     if (ramPercent) {
       ramPercent.textContent = `${ram.percent.toFixed(1)}%`;
-      ramPercent.className = `text-3xl font-extrabold font-mono ${ramColors.text}`;
+      ramPercent.className = `text-3xl font-semibold tracking-tight font-mono ${ramColors.text}`;
     }
     if (ramRatio) {
       ramRatio.textContent = `${ram.used_gb.toFixed(1)} / ${ram.total_gb.toFixed(1)} GB`;
     }
     if (ramBar) {
-      ramBar.style.width = `${Math.min(ram.percent, 100)}%`;
-      ramBar.className = `h-2 rounded-full transition-all duration-500 ${ramColors.bar}`;
+      ramBar.style.width = `${Math.min(100, Math.max(0, ram.percent))}%`;
+      ramBar.className = `h-1.5 rounded-full transition-all duration-500 ${ramColors.bar}`;
+    }
+  } else {
+    if (ramPercent) {
+      ramPercent.textContent = "--";
+      ramPercent.className = "text-3xl font-semibold tracking-tight font-mono text-slate-500";
+    }
+    if (ramRatio) ramRatio.textContent = "0 / 0 GB";
+    if (ramBar) ramBar.style.width = "0%";
+  }
+
+  if (swapInfo) {
+    if (data.swap_memory && data.swap_memory.total_gb > 0) {
+      swapInfo.textContent = `${data.swap_memory.used_gb.toFixed(1)} / ${data.swap_memory.total_gb.toFixed(1)} GB (${data.swap_memory.percent.toFixed(0)}%)`;
+    } else if (data.swap_memory && data.swap_memory.total_gb === 0) {
+      swapInfo.textContent = `disabled`;
+    } else {
+      swapInfo.textContent = `--`;
     }
   }
 
-  if (data.swap_memory) {
-    const swapInfo = document.getElementById("swap-info");
-    if (swapInfo) {
-      swapInfo.textContent = `Swap: ${data.swap_memory.percent.toFixed(0)}% (${data.swap_memory.used_gb.toFixed(1)} GB)`;
-    }
-  }
+  // 4. Disk
+  const diskPercent = document.getElementById("disk-percent");
+  const diskRatio = document.getElementById("disk-ratio");
+  const diskFree = document.getElementById("disk-free");
+  const diskBar = document.getElementById("disk-bar");
 
-  // 4. Disco Root
-  if (data.root_storage) {
+  if (data.root_storage && data.root_storage.percent !== undefined && data.root_storage.percent !== null) {
     const disk = data.root_storage;
     const diskColors = getStatusColor(disk.percent);
 
-    const diskPercent = document.getElementById("disk-percent");
-    const diskRatio = document.getElementById("disk-ratio");
-    const diskFree = document.getElementById("disk-free");
-    const diskBar = document.getElementById("disk-bar");
-
     if (diskPercent) {
       diskPercent.textContent = `${disk.percent.toFixed(1)}%`;
-      diskPercent.className = `text-3xl font-extrabold font-mono ${diskColors.text}`;
+      diskPercent.className = `text-3xl font-semibold tracking-tight font-mono ${diskColors.text}`;
     }
     if (diskRatio) {
       diskRatio.textContent = `${disk.used_gb.toFixed(1)} / ${disk.total_gb.toFixed(1)} GB`;
     }
     if (diskFree) {
-      diskFree.textContent = `Livre: ${disk.free_gb.toFixed(1)} GB`;
+      diskFree.textContent = `${disk.free_gb.toFixed(1)} GB`;
     }
     if (diskBar) {
-      diskBar.style.width = `${Math.min(disk.percent, 100)}%`;
-      diskBar.className = `h-2 rounded-full transition-all duration-500 ${diskColors.bar}`;
+      diskBar.style.width = `${Math.min(100, Math.max(0, disk.percent))}%`;
+      diskBar.className = `h-1.5 rounded-full transition-all duration-500 ${diskColors.bar}`;
     }
+  } else {
+    if (diskPercent) {
+      diskPercent.textContent = "--";
+      diskPercent.className = "text-3xl font-semibold tracking-tight font-mono text-slate-500";
+    }
+    if (diskRatio) diskRatio.textContent = "0 / 0 GB";
+    if (diskFree) diskFree.textContent = "--";
+    if (diskBar) diskBar.style.width = "0%";
   }
 
-  // 5. Docker Overview
+  // 5. Docker
+  const dockerBadge = document.getElementById("docker-status-badge");
+  const dockerSubtext = document.getElementById("docker-subtext");
+  const runningCount = document.getElementById("docker-running-count");
+  const stoppedCount = document.getElementById("docker-stopped-count");
+  const totalBadge = document.getElementById("containers-total-badge");
+
   if (data.docker) {
     const d = data.docker;
-    const badge = document.getElementById("docker-status-badge");
-    const runningCount = document.getElementById("docker-running-count");
-    const stoppedCount = document.getElementById("docker-stopped-count");
-    const totalBadge = document.getElementById("containers-total-badge");
-
-    if (badge) {
+    if (dockerBadge) {
       if (d.is_running) {
-        badge.textContent = "Ativo";
-        badge.className = "text-xs px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+        dockerBadge.textContent = "active";
+        dockerBadge.className = "px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
       } else {
-        badge.textContent = "Inativo / Indisponível";
-        badge.className = "text-xs px-2 py-0.5 rounded font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20";
+        dockerBadge.textContent = "inactive";
+        dockerBadge.className = "px-2 py-0.5 rounded text-[11px] font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20";
       }
     }
 
     if (runningCount) runningCount.textContent = d.summary?.running ?? 0;
     if (stoppedCount) stoppedCount.textContent = d.summary?.stopped ?? 0;
-    if (totalBadge) totalBadge.textContent = d.summary?.total ?? 0;
+    if (totalBadge) totalBadge.textContent = `${d.summary?.total ?? 0} total`;
+    if (dockerSubtext) dockerSubtext.textContent = `containers: ${d.summary?.total ?? 0} total`;
 
-    renderContainersTable(d.containers || []);
+    renderContainersTable(d.containers || [], d.is_running);
+  } else {
+    if (dockerBadge) {
+      dockerBadge.textContent = "n/a";
+      dockerBadge.className = "px-2 py-0.5 rounded text-[11px] font-mono bg-slate-800 text-slate-400 border border-slate-700";
+    }
+    if (runningCount) runningCount.textContent = "0";
+    if (stoppedCount) stoppedCount.textContent = "0";
+    if (totalBadge) totalBadge.textContent = "0 total";
+    if (dockerSubtext) dockerSubtext.textContent = "containers: 0 total";
+    renderContainersTable([], false);
   }
 
-  // 6. I/O e Rede
+  // 6. Network & Disk I/O
   renderNetworkInterfaces(data.network_interfaces || []);
 
+  const readMb = document.getElementById("disk-read-mb");
+  const writeMb = document.getElementById("disk-write-mb");
   if (data.disk_io) {
-    const readMb = document.getElementById("disk-read-mb");
-    const writeMb = document.getElementById("disk-write-mb");
     if (readMb) readMb.textContent = `${data.disk_io.read_mb.toFixed(1)} MB`;
     if (writeMb) writeMb.textContent = `${data.disk_io.write_mb.toFixed(1)} MB`;
+  } else {
+    if (readMb) readMb.textContent = "0.0 MB";
+    if (writeMb) writeMb.textContent = "0.0 MB";
   }
 
-  // 7. Usuários logados
+  // 7. Active sessions
   const usersCount = document.getElementById("users-count");
   if (usersCount) {
     const count = (data.logged_in_users || []).length;
-    usersCount.textContent = `${count} sessão(ões)`;
+    usersCount.textContent = String(count);
   }
 
-  // 8. Processos Top CPU e RAM
+  // 8. Top Processes
   renderProcessTable("cpu-processes-body", data.top_cpu_processes || [], "cpu");
   renderProcessTable("memory-processes-body", data.top_memory_processes || [], "memory");
 }
 
-// Renderizar medidores de cada núcleo de CPU
+// Renderizar medidores por core
 function renderCpuCores(cores) {
   const container = document.getElementById("cores-grid");
   if (!container) return;
 
-  if (cores.length === 0) {
-    container.innerHTML = `<div class="text-xs text-slate-500 col-span-full py-2">Sem métricas por núcleo disponíveis</div>`;
+  if (!cores || cores.length === 0) {
+    container.innerHTML = `<div class="text-xs text-slate-500 col-span-full py-6 text-center font-mono">no core metrics available</div>`;
     return;
   }
 
   container.innerHTML = cores.map((usage, idx) => {
-    const colors = getStatusColor(usage);
+    const val = (usage !== null && usage !== undefined && !isNaN(usage)) ? Number(usage) : null;
+    const colors = getStatusColor(val);
+    const displayVal = val !== null ? `${val.toFixed(1)}%` : "--";
+    const widthVal = val !== null ? Math.min(100, Math.max(0, val)) : 0;
+
     return `
-      <div class="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-        <div class="flex items-center justify-between text-xs mb-1.5">
-          <span class="text-slate-400 font-mono">CPU ${idx}</span>
-          <span class="font-mono font-bold ${colors.text}">${usage.toFixed(1)}%</span>
+      <div class="bg-[#171b23] p-3 rounded-lg border border-[#202530] flex flex-col justify-between font-mono">
+        <div class="flex items-center justify-between text-xs mb-2">
+          <span class="text-slate-400">core ${idx}</span>
+          <span class="${colors.text}">${displayVal}</span>
         </div>
-        <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-          <div class="h-1.5 rounded-full ${colors.bar} transition-all duration-300" style="width: ${Math.min(usage, 100)}%"></div>
+        <div class="w-full bg-[#1e222a] rounded-full h-1 overflow-hidden">
+          <div class="h-1 rounded-full ${colors.bar} transition-all duration-300" style="width: ${widthVal}%"></div>
         </div>
       </div>
     `;
@@ -275,31 +331,40 @@ function renderNetworkInterfaces(interfaces) {
   const container = document.getElementById("network-interfaces-list");
   if (!container) return;
 
-  if (interfaces.length === 0) {
-    container.innerHTML = `<div class="text-xs text-slate-500 py-1">Nenhuma interface de rede detectada.</div>`;
+  if (!interfaces || interfaces.length === 0) {
+    container.innerHTML = `<div class="text-xs text-slate-500 py-2 text-center">no interfaces detected</div>`;
     return;
   }
 
   container.innerHTML = interfaces.map(iface => `
-    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs">
-      <span class="font-mono font-semibold text-slate-300">${escapeHtml(iface.interface)}</span>
-      <div class="flex items-center gap-3 font-mono text-[11px]">
-        <span class="text-emerald-400">↓ ${iface.bytes_recv_mb.toFixed(1)} MB</span>
-        <span class="text-blue-400">↑ ${iface.bytes_sent_mb.toFixed(1)} MB</span>
+    <div class="flex items-center justify-between p-2 rounded bg-[#171b23] border border-[#202530] text-xs font-mono">
+      <span class="text-slate-200 font-medium">${escapeHtml(iface.interface)}</span>
+      <div class="flex items-center gap-3 text-[11px]">
+        <span class="text-slate-300">↓ ${(iface.bytes_recv_mb ?? 0).toFixed(1)} MB</span>
+        <span class="text-slate-400">↑ ${(iface.bytes_sent_mb ?? 0).toFixed(1)} MB</span>
       </div>
     </div>
   `).join("");
 }
 
 // Renderizar tabela de containers Docker
-function renderContainersTable(containers) {
+function renderContainersTable(containers, isDaemonRunning) {
   const tbody = document.getElementById("containers-table-body");
   if (!tbody) return;
 
-  if (containers.length === 0) {
+  if (!isDaemonRunning) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="py-4 text-center text-slate-500 font-sans">Nenhum container Docker ativo no momento.</td>
+        <td colspan="5" class="py-6 text-center text-slate-500 font-mono">Docker daemon unreachable or inactive.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  if (!containers || containers.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="py-6 text-center text-slate-500 font-mono">No running containers.</td>
       </tr>
     `;
     return;
@@ -316,28 +381,28 @@ function renderContainersTable(containers) {
       : "-";
 
     return `
-      <tr class="hover:bg-slate-800/40 transition-colors">
-        <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(c.name)}</td>
+      <tr class="hover:bg-[#161a22] transition-colors border-b border-[#1e222a]">
+        <td class="py-2.5 px-3 font-medium text-white">${escapeHtml(c.name)}</td>
         <td class="py-2.5 px-3">
-          <span class="px-2 py-0.5 rounded-full border text-[11px] ${statusPillClass}">${escapeHtml(c.status || c.state)}</span>
+          <span class="px-2 py-0.5 rounded text-[11px] font-mono border ${statusPillClass}">${escapeHtml(c.status || c.state)}</span>
         </td>
-        <td class="py-2.5 px-3 text-slate-400 truncate max-w-[200px]" title="${escapeHtml(c.image)}">${escapeHtml(c.image)}</td>
-        <td class="py-2.5 px-3 text-slate-500">${escapeHtml(c.id)}</td>
-        <td class="py-2.5 px-3 text-slate-400">${escapeHtml(portsStr)}</td>
+        <td class="py-2.5 px-3 text-slate-300 truncate max-w-[220px]" title="${escapeHtml(c.image)}">${escapeHtml(c.image)}</td>
+        <td class="py-2.5 px-3 text-slate-400 font-mono text-[11px]">${escapeHtml(c.id ? c.id.slice(0, 12) : '-')}</td>
+        <td class="py-2.5 px-3 text-slate-400 font-mono text-[11px]">${escapeHtml(portsStr)}</td>
       </tr>
     `;
   }).join("");
 }
 
-// Renderizar tabelas de processos (CPU ou Memória)
+// Renderizar tabelas de processos
 function renderProcessTable(elementId, processes, highlightKey) {
   const tbody = document.getElementById(elementId);
   if (!tbody) return;
 
-  if (processes.length === 0) {
+  if (!processes || processes.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="4" class="py-3 text-center text-slate-500 font-sans">Nenhum processo listado.</td>
+        <td colspan="4" class="py-6 text-center text-slate-500 font-mono">no processes found.</td>
       </tr>
     `;
     return;
@@ -345,15 +410,18 @@ function renderProcessTable(elementId, processes, highlightKey) {
 
   tbody.innerHTML = processes.slice(0, 10).map(proc => {
     const isCpuHighlight = highlightKey === "cpu";
-    const cpuClass = isCpuHighlight ? "text-emerald-400 font-bold" : "text-slate-400";
-    const memClass = !isCpuHighlight ? "text-blue-400 font-bold" : "text-slate-400";
+    const cpuClass = isCpuHighlight ? "text-emerald-400 font-medium" : "text-slate-400";
+    const memClass = !isCpuHighlight ? "text-blue-400 font-medium" : "text-slate-400";
+
+    const cpuVal = proc.cpu_percent !== undefined ? proc.cpu_percent.toFixed(1) : "0.0";
+    const memVal = proc.memory_percent !== undefined ? proc.memory_percent.toFixed(1) : "0.0";
 
     return `
-      <tr class="hover:bg-slate-800/40 transition-colors">
-        <td class="py-2 px-3 text-slate-500">${proc.pid}</td>
-        <td class="py-2 px-3 text-slate-200 font-sans truncate max-w-[140px]" title="${escapeHtml(proc.name)}">${escapeHtml(proc.name)}</td>
-        <td class="py-2 px-3 text-right ${cpuClass}">${proc.cpu_percent.toFixed(1)}%</td>
-        <td class="py-2 px-3 text-right ${memClass}">${proc.memory_percent.toFixed(1)}%</td>
+      <tr class="hover:bg-[#161a22] transition-colors border-b border-[#1e222a]">
+        <td class="py-2 px-3 text-slate-500 font-mono text-[11px]">${proc.pid}</td>
+        <td class="py-2 px-3 text-slate-200 truncate max-w-[160px] font-mono" title="${escapeHtml(proc.name)}">${escapeHtml(proc.name)}</td>
+        <td class="py-2 px-3 text-right font-mono text-xs ${cpuClass}">${cpuVal}%</td>
+        <td class="py-2 px-3 text-right font-mono text-xs ${memClass}">${memVal}%</td>
       </tr>
     `;
   }).join("");
