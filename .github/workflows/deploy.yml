@@ -1,0 +1,35 @@
+name: Deploy VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.2.0
+
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+          script: |
+            mkdir -p ~/projects
+
+            if [ ! -d ~/projects/my-vps/.git ]; then
+              cd ~/projects
+              git clone git@github.com:BrunoSaintClair/my-vps.git
+            fi
+
+            cd ~/projects/my-vps
+
+            git pull origin main
+
+            docker compose up -d --build
+
+            docker image prune -f

@@ -1,0 +1,7 @@
+services:
+  app:
+    build: .
+    container_name: my-vps
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
