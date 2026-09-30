@@ -1,6 +1,7 @@
 import datetime
 import os
 import time
+import docker
 import psutil
 from fastapi import FastAPI, status
 
@@ -18,12 +19,66 @@ app = FastAPI(
     description="""
 A lightweight real-time telemetry and resource monitoring API for VPS and host systems.
 Exposes CPU (total and per-core), memory, swap, root storage, disk I/O, network, load average,
-uptime, top CPU/memory processes, and active user sessions.
+uptime, Docker container status, top CPU/memory processes, and active user sessions.
     """,
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+def get_docker_overview():
+    """Collects Docker daemon status and a list of hosted containers."""
+    try:
+        client = docker.from_env()
+        raw_containers = client.containers.list(all=True)
+
+        containers = []
+        running_count = 0
+        stopped_count = 0
+
+        for c in raw_containers:
+            state = c.attrs.get("State", {}).get("Status", c.status)
+            if state == "running":
+                running_count += 1
+            else:
+                stopped_count += 1
+
+            image_name = c.attrs.get("Config", {}).get("Image", "")
+            if not image_name and c.image.tags:
+                image_name = c.image.tags[0]
+
+            containers.append({
+                "id": c.short_id,
+                "name": c.name.lstrip("/"),
+                "image": image_name,
+                "status": c.status,
+                "state": state,
+                "created": c.attrs.get("Created"),
+                "ports": c.attrs.get("NetworkSettings", {}).get("Ports", {}) or {}
+            })
+
+        return {
+            "installed": True,
+            "total_containers": len(containers),
+            "running_containers": running_count,
+            "stopped_containers": stopped_count,
+            "containers": containers,
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "installed": False,
+            "total_containers": 0,
+            "running_containers": 0,
+            "stopped_containers": 0,
+            "containers": [],
+            "error": str(e)
+        }
 
 
 # ==============================================================================
@@ -56,6 +111,7 @@ Collects and returns comprehensive real-time system metrics:
 - **Disk I/O**: Read and write bytes and operation counters.
 - **Network Interfaces**: Inbound and outbound traffic bytes and packet counters per interface.
 - **Sensors**: Thermal and fan readings when supported by the hardware and kernel.
+- **Docker**: Daemon status, container counts, and container runtime states.
 - **Top CPU Processes**: The 10 processes consuming the most CPU power.
 - **Top Memory Processes**: The 10 processes consuming the most RAM.
 - **Logged in Users**: Active terminal and SSH user sessions on the system.
@@ -126,7 +182,10 @@ def get_computer_data():
         "last_15m": round(raw_load[2], 2)
     }
 
-    # 7. Processes (single iteration for both top CPU and top memory)
+    # 7. Docker Containers Overview
+    docker_data = get_docker_overview()
+
+    # 8. Processes (single iteration for both top CPU and top memory)
     all_processes = []
     for proc in psutil.process_iter(["pid", "name", "memory_percent", "cpu_percent"]):
         try:
@@ -143,13 +202,13 @@ def get_computer_data():
     top_memory_processes = sorted(all_processes, key=lambda x: x["memory_percent"], reverse=True)[:10]
     top_cpu_processes = sorted(all_processes, key=lambda x: x["cpu_percent"], reverse=True)[:10]
 
-    # 8. Network Traffic I/O
+    # 9. Network Traffic I/O
     try:
         network_stats = {k: v._asdict() for k, v in psutil.net_io_counters(pernic=True).items()}
     except Exception:
         network_stats = {}
 
-    # 9. Active Logged-in Users (e.g. SSH sessions)
+    # 10. Active Logged-in Users (e.g. SSH sessions)
     logged_in_users = []
     try:
         for u in psutil.users():
@@ -173,6 +232,7 @@ def get_computer_data():
         "network_interfaces": network_stats,
         "temperatures": temperatures,
         "fans": fans,
+        "docker": docker_data,
         "top_cpu_processes": top_cpu_processes,
         "top_memory_processes": top_memory_processes,
         "logged_in_users": logged_in_users

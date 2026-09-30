@@ -1,9 +1,11 @@
 from .health import HealthResponse
 from .metrics import (
+    ContainerInfo,
     CpuMetrics,
     CpuTimes,
     DiskIO,
     DiskUsage,
+    DockerOverview,
     LoadAverage,
     LoggedInUser,
     NetworkInterfaceIO,
@@ -25,6 +27,8 @@ __all__ = [
     "DiskUsage",
     "DiskIO",
     "NetworkInterfaceIO",
+    "ContainerInfo",
+    "DockerOverview",
     "ProcessDetail",
     "LoggedInUser",
     "SystemMetricsResponse",

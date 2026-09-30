@@ -269,6 +269,81 @@ class LoggedInUser(BaseModel):
     )
 
 
+class ContainerInfo(BaseModel):
+    """Summary of an individual Docker container."""
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(
+        ...,
+        description="Short container ID (12 characters)",
+        examples=["a1b2c3d4e5f6"]
+    )
+    name: str = Field(
+        ...,
+        description="Container name",
+        examples=["postgres-db"]
+    )
+    image: str = Field(
+        ...,
+        description="Docker image tag or repository used",
+        examples=["postgres:16-alpine"]
+    )
+    status: str = Field(
+        ...,
+        description="Human-readable status string (e.g. 'Up 2 hours', 'Exited (0)')",
+        examples=["Up 2 hours"]
+    )
+    state: str = Field(
+        ...,
+        description="Lifecycle state (e.g. running, exited, restarting, paused)",
+        examples=["running"]
+    )
+    created: Optional[str] = Field(
+        None,
+        description="Creation ISO 8601 timestamp",
+        examples=["2026-09-28T12:00:00Z"]
+    )
+    ports: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Container port bindings mapped to the host"
+    )
+
+
+class DockerOverview(BaseModel):
+    """Status and metrics of Docker daemon and all hosted containers."""
+    model_config = ConfigDict(extra="allow")
+
+    installed: bool = Field(
+        ...,
+        description="Indicates whether the Docker daemon is installed and reachable via socket",
+        examples=[True]
+    )
+    total_containers: int = Field(
+        0,
+        description="Total number of existing containers (running, stopped, paused)",
+        examples=[5]
+    )
+    running_containers: int = Field(
+        0,
+        description="Count of currently active/running containers",
+        examples=[4]
+    )
+    stopped_containers: int = Field(
+        0,
+        description="Count of stopped/exited containers",
+        examples=[1]
+    )
+    containers: List[ContainerInfo] = Field(
+        default_factory=list,
+        description="List of all detected containers and their details"
+    )
+    error: Optional[str] = Field(
+        None,
+        description="Error message if Docker socket connection failed",
+        examples=[None]
+    )
+
+
 class SystemMetricsResponse(BaseModel):
     """Comprehensive real-time VPS telemetry schema."""
     uptime: UptimeInfo = Field(
@@ -310,6 +385,10 @@ class SystemMetricsResponse(BaseModel):
     fans: Dict[str, Any] = Field(
         default_factory=dict,
         description="Cooling fan RPM sensor readings (available on supported Linux hardware)"
+    )
+    docker: DockerOverview = Field(
+        ...,
+        description="Docker engine status, container counts, and container list"
     )
     top_cpu_processes: List[ProcessDetail] = Field(
         ...,
