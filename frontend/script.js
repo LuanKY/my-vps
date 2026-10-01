@@ -24,6 +24,12 @@ const translations = {
     checking: "checking",
     running: "running",
     stopped: "stopped",
+    status_running: "running",
+    status_exited: "exited",
+    status_paused: "paused",
+    status_restarting: "restarting",
+    status_created: "created",
+    status_dead: "dead",
     containers_count: (n) => `containers: ${n} total`,
     total_badge: (n) => `${n} total`,
     disabled: "disabled",
@@ -65,6 +71,12 @@ const translations = {
     checking: "verificando",
     running: "em execução",
     stopped: "parado",
+    status_running: "em execução",
+    status_exited: "encerrado",
+    status_paused: "pausado",
+    status_restarting: "reiniciando",
+    status_created: "criado",
+    status_dead: "morto",
     containers_count: (n) => `contêineres: ${n} no total`,
     total_badge: (n) => `${n} no total`,
     disabled: "desativado",
@@ -96,6 +108,45 @@ const translations = {
 };
 
 let currentLang = localStorage.getItem("myvps_lang") || "en";
+
+function formatContainerStatus(statusStr, stateStr) {
+  const raw = (statusStr || stateStr || "").trim();
+  const lower = raw.toLowerCase();
+
+  // Caso 1: corresponde diretamente ao estado conhecido (ex: "running", "exited", "paused")
+  if (lower === "running") return t("status_running");
+  if (lower === "exited") return t("status_exited");
+  if (lower === "paused") return t("status_paused");
+  if (lower === "restarting") return t("status_restarting");
+  if (lower === "created") return t("status_created");
+  if (lower === "dead") return t("status_dead");
+
+  // Caso 2: c.status do docker-py vem no formato "Up 2 hours", "Exited (0) 5 minutes ago", etc.
+  if (currentLang === "pt") {
+    // Se começa com "Up", traduz para "Ativo" mantendo o restante ou se for apenas Up
+    if (lower.startsWith("up")) {
+      return raw.replace(/^Up\b/i, "Ativo");
+    }
+    if (lower.startsWith("exited")) {
+      return raw.replace(/^Exited\b/i, "Encerrado");
+    }
+    if (lower.startsWith("restarting")) {
+      return raw.replace(/^Restarting\b/i, "Reiniciando");
+    }
+    if (lower.startsWith("created")) {
+      return raw.replace(/^Created\b/i, "Criado");
+    }
+    if (lower.startsWith("paused")) {
+      return raw.replace(/^Paused\b/i, "Pausado");
+    }
+    if (lower.startsWith("dead")) {
+      return raw.replace(/^Dead\b/i, "Morto");
+    }
+  }
+
+  // Fallback para o valor original se não bater ou em en
+  return raw || (stateStr ? (t(`status_${stateStr}`) || stateStr) : "-");
+}
 
 function t(key, ...args) {
   const dict = translations[currentLang] || translations.en;
@@ -541,7 +592,7 @@ function renderContainersTable(containers, isDaemonRunning) {
       <tr class="hover:bg-[#161a22] transition-colors border-b border-[#1e222a]">
         <td class="py-2.5 px-3 font-medium text-white">${escapeHtml(c.name)}</td>
         <td class="py-2.5 px-3">
-          <span class="px-2 py-0.5 rounded text-[11px] font-mono border ${statusPillClass}">${escapeHtml(c.status || c.state)}</span>
+          <span class="px-2 py-0.5 rounded text-[11px] font-mono border ${statusPillClass}">${escapeHtml(formatContainerStatus(c.status, c.state))}</span>
         </td>
         <td class="py-2.5 px-3 text-slate-300 truncate max-w-[220px]" title="${escapeHtml(c.image)}">${escapeHtml(c.image)}</td>
         <td class="py-2.5 px-3 text-slate-400 font-mono text-[11px]">${escapeHtml(c.id ? c.id.slice(0, 12) : '-')}</td>
