@@ -423,3 +423,9 @@ class SystemMetricsResponse(BaseModel):
         default_factory=list,
         description="Active terminal/SSH user sessions currently established on the VPS"
     )
+    server_name: Optional[str] = Field(
+        default="MyVPS",
+        description="Custom display name or hostname for the VPS instance",
+        examples=["Production VPS"]
+    )
+

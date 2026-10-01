@@ -1,13 +1,44 @@
 import asyncio
+import base64
 import datetime
 import os
+import secrets
 import time
+from typing import Optional
+
 import docker
 import psutil
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import FastAPI, Query, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from schemas import HealthResponse, SystemMetricsResponse
+
+# ==============================================================================
+# Environment Configuration & Basic Auth Settings
+# ==============================================================================
+
+SERVER_NAME = os.getenv("SERVER_NAME", "MyVPS").strip() or "MyVPS"
+UPDATE_INTERVAL = float(os.getenv("UPDATE_INTERVAL", "3.0"))
+AUTH_USERNAME = os.getenv("AUTH_USERNAME", "").strip()
+AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "").strip()
+AUTH_ENABLED = bool(AUTH_USERNAME and AUTH_PASSWORD)
+
+
+def verify_basic_credentials(auth_header: Optional[str]) -> bool:
+    """Validates HTTP Basic Auth credentials using constant-time string comparison."""
+    if not auth_header or not auth_header.startswith("Basic "):
+        return False
+    try:
+        encoded_creds = auth_header.split(" ", 1)[1].strip()
+        decoded = base64.b64decode(encoded_creds).decode("utf-8")
+        if ":" not in decoded:
+            return False
+        username, password = decoded.split(":", 1)
+        return secrets.compare_digest(username, AUTH_USERNAME) and secrets.compare_digest(password, AUTH_PASSWORD)
+    except Exception:
+        return False
+
 
 # Initialize psutil baseline for non-blocking CPU percent measurements
 psutil.cpu_percent(interval=None, percpu=True)
@@ -150,6 +181,23 @@ uptime, Docker container summary, top CPU/memory processes, and active user sess
     redoc_url="/redoc"
 )
 
+# Optional Basic Auth Middleware for HTTP endpoints and Static Dashboard
+if AUTH_ENABLED:
+    @app.middleware("http")
+    async def basic_auth_middleware(request: Request, call_next):
+        # Health check endpoint remains accessible without auth for monitors/uptime checks
+        if request.url.path == "/health":
+            return await call_next(request)
+
+        auth_header = request.headers.get("Authorization")
+        if not verify_basic_credentials(auth_header):
+            return Response(
+                content="Unauthorized",
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                headers={"WWW-Authenticate": f'Basic realm="{SERVER_NAME}"'}
+            )
+        return await call_next(request)
+
 
 # ==============================================================================
 # Endpoints
@@ -162,15 +210,20 @@ uptime, Docker container summary, top CPU/memory processes, and active user sess
     summary="Health check",
     description="Returns the operational status of the monitoring service."
 )
-@app.get(
-    "/",
-    response_model=HealthResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Health check",
-    description="Returns the operational status of the monitoring service."
-)
 def health():
     return {"status": "healthy"}
+
+
+@app.get(
+    "/",
+    summary="Root endpoint",
+    description="Redirects to the dashboard.",
+    include_in_schema=False
+)
+def root_endpoint():
+    return RedirectResponse(url="/dashboard/")
+
+
 
 
 @app.get(
@@ -258,7 +311,7 @@ def get_computer_data():
     }
 
     # 6. Root Storage Space formatted in GB and percentage
-    root_path = "/" if os.name != "nt" else os.path.abspath(os.sep)
+    root_path = "/host/root" if os.path.exists("/host/root") else ("/" if os.name != "nt" else os.path.abspath(os.sep))
     try:
         du = psutil.disk_usage(root_path)
         disk_usage_data = {
@@ -355,26 +408,39 @@ def get_computer_data():
         "docker": docker_data,
         "top_cpu_processes": top_cpu_processes,
         "top_memory_processes": top_memory_processes,
-        "logged_in_users": logged_in_users
+        "logged_in_users": logged_in_users,
+        "server_name": SERVER_NAME
     }
 
 
 @app.websocket("/ws/data")
 async def websocket_system_metrics(
     websocket: WebSocket,
-    interval: float = Query(3.0, ge=0.5, le=60.0, description="Interval in seconds between metric updates")
+    interval: Optional[float] = Query(None, ge=0.5, le=60.0, description="Interval in seconds between metric updates"),
+    auth: Optional[str] = Query(None, description="Optional base64 basic auth string for WebSocket clients")
 ):
     """
     WebSocket endpoint for real-time VPS telemetry streaming.
     Serializes and delivers metrics validated against SystemMetricsResponse.
     """
+    if AUTH_ENABLED:
+        auth_header = websocket.headers.get("authorization")
+        is_authenticated = verify_basic_credentials(auth_header)
+        if not is_authenticated and auth:
+            is_authenticated = verify_basic_credentials(f"Basic {auth}")
+        if not is_authenticated:
+            # Policy violation in WebSocket RFC 6455
+            await websocket.close(code=1008)
+            return
+
     await websocket.accept()
+    sleep_interval = interval if interval is not None else UPDATE_INTERVAL
     try:
         while True:
             raw_metrics = await asyncio.to_thread(get_computer_data)
             metrics_payload = SystemMetricsResponse(**raw_metrics).model_dump(mode="json")
             await websocket.send_json(metrics_payload)
-            await asyncio.sleep(interval)
+            await asyncio.sleep(sleep_interval)
     except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     except Exception:
@@ -382,6 +448,7 @@ async def websocket_system_metrics(
             await websocket.close()
         except Exception:
             pass
+
 
 
 # ==============================================================================

@@ -1,17 +1,35 @@
+# ==============================================================================
+# MyVPS - Docker Compose Configuration
+# ==============================================================================
 services:
   app:
     build: .
     container_name: my-vps
     restart: unless-stopped
+    pid: "host"
     ports:
-      - "8000:8000"
-    networks:
-      - default
-      - proxy
+      - "${PORT:-8000}:8000"
+    environment:
+      - SERVER_NAME=${SERVER_NAME:-MyVPS}
+      - AUTH_USERNAME=${AUTH_USERNAME:-}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-}
+      - UPDATE_INTERVAL=${UPDATE_INTERVAL:-3.0}
     volumes:
+      # Access host Docker socket to monitor container stats
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Access host login sessions (Linux only)
       - /var/run/utmp:/var/run/utmp:ro
+      # Access host network statistics
       - /proc/net/dev:/host/proc/net/dev:ro
-networks:
-    proxy:
-      external: true
+      # Access host root filesystem to accurately report disk capacity
+      - /:/host/root:ro
+
+    # If you use a reverse proxy like Traefik/Nginx Proxy Manager on a shared external network,
+    # uncomment the networks section below and at the bottom of this file:
+    # networks:
+    #   - default
+    #   - proxy
+
+# networks:
+#   proxy:
+#     external: true

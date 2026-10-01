@@ -9,7 +9,6 @@ let reconnectTimer = null;
 let lastDashboardData = null;
 let currentConnectionState = "connecting";
 
-// Dicionário i18n
 const translations = {
   en: {
     uptime_label: "uptime:",
@@ -297,6 +296,17 @@ function updateStatus(state) {
 // Renderização principal do dashboard
 function renderDashboard(data) {
   if (!data) return;
+
+  // 0. Server Name (Aba do navegador e cabeçalho)
+  if (data.server_name) {
+    const serverNameEl = document.getElementById("server-name-display");
+    if (serverNameEl && serverNameEl.textContent !== data.server_name) {
+      serverNameEl.textContent = data.server_name;
+    }
+    if (document.title !== data.server_name) {
+      document.title = data.server_name;
+    }
+  }
 
   // Update simple timestamp (no label)
   const now = new Date();
