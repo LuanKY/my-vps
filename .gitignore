@@ -1,10 +1,28 @@
+# Python Virtual Environments & Bytecode
 venv/
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 
-# Environment files
+# Environment files & Secrets
 .env
 .env.local
 .env.*.local
+*.pem
+*.key
+*.pub
+id_rsa*
+id_ed25519*
+
+# System & OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+*.swp
+*.bak
