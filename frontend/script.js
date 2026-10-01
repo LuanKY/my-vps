@@ -6,6 +6,140 @@ const protocol = (typeof window !== "undefined" && window.location.protocol === 
 const WS_URL = `${protocol}//${hostWithPort}/ws/data`;
 let socket = null;
 let reconnectTimer = null;
+let lastDashboardData = null;
+let currentConnectionState = "connecting";
+
+// Dicionário i18n
+const translations = {
+  en: {
+    uptime_label: "uptime:",
+    status_connecting: "connecting",
+    status_connected: "connected",
+    status_disconnected: "disconnected",
+    load_avg_label: "load average:",
+    memory_card_title: "MEMORY",
+    swap_label: "swap:",
+    disk_card_title: "DISK (/)",
+    free_label: "free:",
+    checking: "checking",
+    running: "running",
+    stopped: "stopped",
+    containers_count: (n) => `containers: ${n} total`,
+    total_badge: (n) => `${n} total`,
+    disabled: "disabled",
+    active: "active",
+    inactive: "inactive",
+    realtime: "realtime",
+    waiting_metrics: "waiting for metrics...",
+    no_interfaces: "no interfaces detected",
+    no_cores: "no core metrics available",
+    read: "read",
+    write: "write",
+    active_sessions: "active sessions:",
+    th_name: "NAME",
+    th_status: "STATUS",
+    th_image: "IMAGE",
+    th_container_id: "CONTAINER ID",
+    th_ports: "PORTS",
+    th_command: "COMMAND",
+    docker_unreachable: "Docker daemon unreachable or inactive.",
+    no_running_containers: "No running containers.",
+    top_processes_cpu: "Top Processes (CPU)",
+    top_processes_memory: "Top Processes (Memory)",
+    waiting_processes: "waiting for processes...",
+    no_processes: "no processes found."
+  },
+  pt: {
+    uptime_label: "tempo de atividade:",
+    status_connecting: "conectando",
+    status_connected: "conectado",
+    status_disconnected: "desconectado",
+    load_avg_label: "load average:",
+    memory_card_title: "MEMÓRIA",
+    swap_label: "swap:",
+    disk_card_title: "DISCO (/)",
+    free_label: "livre:",
+    checking: "verificando",
+    running: "em execução",
+    stopped: "parado",
+    containers_count: (n) => `contêineres: ${n} no total`,
+    total_badge: (n) => `${n} no total`,
+    disabled: "desativado",
+    active: "ativo",
+    inactive: "inativo",
+    realtime: "tempo real",
+    waiting_metrics: "aguardando métricas...",
+    no_interfaces: "nenhuma interface detectada",
+    no_cores: "nenhuma métrica de núcleos disponível",
+    read: "leitura",
+    write: "gravação",
+    active_sessions: "sessões ativas:",
+    th_name: "NOME",
+    th_status: "STATUS",
+    th_image: "IMAGEM",
+    th_container_id: "CONTAINER ID",
+    th_ports: "PORTAS",
+    th_command: "COMANDO",
+    docker_unreachable: "Daemon Docker inacessível ou inativo.",
+    no_running_containers: "Nenhum contêiner em execução.",
+    top_processes_cpu: "Principais Processos (CPU)",
+    top_processes_memory: "Principais Processos (Memória)",
+    waiting_processes: "aguardando processos...",
+    no_processes: "nenhum processo encontrado."
+  }
+};
+
+let currentLang = localStorage.getItem("myvps_lang") || "en";
+
+function t(key, ...args) {
+  const dict = translations[currentLang] || translations.en;
+  const val = dict[key] ?? translations.en[key] ?? key;
+  if (typeof val === "function") {
+    return val(...args);
+  }
+  return val;
+}
+
+function setLanguage(lang) {
+  if (lang !== "en" && lang !== "pt") return;
+  currentLang = lang;
+  try {
+    localStorage.setItem("myvps_lang", lang);
+  } catch (e) {
+    console.warn("Could not save language to localStorage:", e);
+  }
+  document.documentElement.lang = lang;
+  updateLanguageUI();
+}
+
+function updateLanguageUI() {
+  const btnEn = document.getElementById("lang-btn-en");
+  const btnPt = document.getElementById("lang-btn-pt");
+
+  if (btnEn && btnPt) {
+    if (currentLang === "en") {
+      btnEn.className = "px-2 py-0.5 rounded text-white bg-slate-800 font-semibold transition-colors";
+      btnPt.className = "px-2 py-0.5 rounded text-slate-400 hover:text-white transition-colors";
+    } else {
+      btnPt.className = "px-2 py-0.5 rounded text-white bg-slate-800 font-semibold transition-colors";
+      btnEn.className = "px-2 py-0.5 rounded text-slate-400 hover:text-white transition-colors";
+    }
+  }
+
+  // Atualiza elementos com data-i18n
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (key) {
+      el.textContent = t(key);
+    }
+  });
+
+  // Atualiza conexão e dados atuais se houver
+  updateStatus(currentConnectionState);
+  if (lastDashboardData) {
+    renderDashboard(lastDashboardData);
+  }
+}
 
 // Elementos da UI
 const statusPill = document.getElementById("status-pill");
@@ -48,6 +182,7 @@ function connectWebSocket() {
   socket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      lastDashboardData = data;
       renderDashboard(data);
     } catch (err) {
       console.error("JSON parse error:", err);
@@ -61,7 +196,7 @@ function connectWebSocket() {
 
   socket.onerror = (error) => {
     console.error("WebSocket error:", error);
-    updateStatus("error");
+    updateStatus("disconnected");
   };
 }
 
@@ -75,6 +210,7 @@ function scheduleReconnect() {
 
 // Atualizar indicador de conexão
 function updateStatus(state) {
+  currentConnectionState = state;
   if (!statusPill || !statusText || !statusIndicator) return;
 
   statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-mono transition-colors border";
@@ -84,20 +220,20 @@ function updateStatus(state) {
     statusIndicator.innerHTML = `
       <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
     `;
-    statusText.textContent = "connected";
+    statusText.textContent = t("status_connected");
   } else if (state === "connecting") {
     statusPill.className += " bg-[#13161c] border-amber-500/20 text-amber-300";
     statusIndicator.innerHTML = `
       <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
       <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
     `;
-    statusText.textContent = "connecting";
+    statusText.textContent = t("status_connecting");
   } else {
     statusPill.className += " bg-[#13161c] border-rose-500/20 text-rose-400";
     statusIndicator.innerHTML = `
       <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-400"></span>
     `;
-    statusText.textContent = "disconnected";
+    statusText.textContent = t("status_disconnected");
   }
 }
 
@@ -114,9 +250,12 @@ function renderDashboard(data) {
   // 1. Uptime (sanitizes any prefix to avoid duplication with HTML label)
   if (uptimeDisplay) {
     if (data.uptime && data.uptime.uptime_formatted) {
-      const cleanUptime = String(data.uptime.uptime_formatted)
+      let cleanUptime = String(data.uptime.uptime_formatted)
         .replace(/^uptime:\s*/i, "")
+        .replace(/^tempo de atividade:\s*/i, "")
         .trim();
+      
+      // Traduz sufixos d/h/m se em português (ex: "1d 2h 30m" para "1d 2h 30m" - d/h/m é padrão em ambos os idiomas)
       uptimeDisplay.textContent = cleanUptime;
     } else {
       uptimeDisplay.textContent = "--";
@@ -201,7 +340,7 @@ function renderDashboard(data) {
     if (data.swap_memory && data.swap_memory.total_gb > 0) {
       swapInfo.textContent = `${data.swap_memory.used_gb.toFixed(1)} / ${data.swap_memory.total_gb.toFixed(1)} GB (${data.swap_memory.percent.toFixed(0)}%)`;
     } else if (data.swap_memory && data.swap_memory.total_gb === 0) {
-      swapInfo.textContent = `disabled`;
+      swapInfo.textContent = t("disabled");
     } else {
       swapInfo.textContent = `--`;
     }
@@ -252,10 +391,10 @@ function renderDashboard(data) {
     const d = data.docker;
     if (dockerBadge) {
       if (d.is_running) {
-        dockerBadge.textContent = "active";
+        dockerBadge.textContent = t("active");
         dockerBadge.className = "px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
       } else {
-        dockerBadge.textContent = "inactive";
+        dockerBadge.textContent = t("inactive");
         dockerBadge.className = "px-2 py-0.5 rounded text-[11px] font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20";
       }
     }
@@ -266,8 +405,8 @@ function renderDashboard(data) {
 
     if (runningCount) runningCount.textContent = running;
     if (stoppedCount) stoppedCount.textContent = stopped;
-    if (totalBadge) totalBadge.textContent = `${total} total`;
-    if (dockerSubtext) dockerSubtext.textContent = `containers: ${total} total`;
+    if (totalBadge) totalBadge.textContent = t("total_badge", total);
+    if (dockerSubtext) dockerSubtext.textContent = t("containers_count", total);
 
     renderContainersTable(d.containers || [], d.is_running);
   } else {
@@ -277,8 +416,8 @@ function renderDashboard(data) {
     }
     if (runningCount) runningCount.textContent = "0";
     if (stoppedCount) stoppedCount.textContent = "0";
-    if (totalBadge) totalBadge.textContent = "0 total";
-    if (dockerSubtext) dockerSubtext.textContent = "containers: 0 total";
+    if (totalBadge) totalBadge.textContent = t("total_badge", 0);
+    if (dockerSubtext) dockerSubtext.textContent = t("containers_count", 0);
     renderContainersTable([], false);
   }
 
@@ -313,7 +452,7 @@ function renderCpuCores(cores) {
   if (!container) return;
 
   if (!cores || cores.length === 0) {
-    container.innerHTML = `<div class="text-xs text-slate-500 col-span-full py-6 text-center font-mono">no core metrics available</div>`;
+    container.innerHTML = `<div class="text-xs text-slate-500 col-span-full py-6 text-center font-mono">${escapeHtml(t("no_cores"))}</div>`;
     return;
   }
 
@@ -343,7 +482,7 @@ function renderNetworkInterfaces(interfaces) {
   if (!container) return;
 
   if (!interfaces || interfaces.length === 0) {
-    container.innerHTML = `<div class="text-xs text-slate-500 py-2 text-center">no interfaces detected</div>`;
+    container.innerHTML = `<div class="text-xs text-slate-500 py-2 text-center">${escapeHtml(t("no_interfaces"))}</div>`;
     return;
   }
 
@@ -366,7 +505,7 @@ function renderContainersTable(containers, isDaemonRunning) {
   if (!isDaemonRunning) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="py-6 text-center text-slate-500 font-mono">Docker daemon unreachable or inactive.</td>
+        <td colspan="5" class="py-6 text-center text-slate-500 font-mono">${escapeHtml(t("docker_unreachable"))}</td>
       </tr>
     `;
     return;
@@ -375,7 +514,7 @@ function renderContainersTable(containers, isDaemonRunning) {
   if (!containers || containers.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="py-6 text-center text-slate-500 font-mono">No running containers.</td>
+        <td colspan="5" class="py-6 text-center text-slate-500 font-mono">${escapeHtml(t("no_running_containers"))}</td>
       </tr>
     `;
     return;
@@ -413,7 +552,7 @@ function renderProcessTable(elementId, processes, highlightKey) {
   if (!processes || processes.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="4" class="py-6 text-center text-slate-500 font-mono">no processes found.</td>
+        <td colspan="4" class="py-6 text-center text-slate-500 font-mono">${escapeHtml(t("no_processes"))}</td>
       </tr>
     `;
     return;
@@ -451,5 +590,20 @@ function escapeHtml(str) {
 
 // Inicialização
 document.addEventListener("DOMContentLoaded", () => {
+  // Bind nos botões de idioma
+  const btnEn = document.getElementById("lang-btn-en");
+  const btnPt = document.getElementById("lang-btn-pt");
+
+  if (btnEn) {
+    btnEn.addEventListener("click", () => setLanguage("en"));
+  }
+  if (btnPt) {
+    btnPt.addEventListener("click", () => setLanguage("pt"));
+  }
+
+  // Configura estado inicial do idioma
+  updateLanguageUI();
+
+  // Conecta WebSocket
   connectWebSocket();
 });

@@ -67,21 +67,26 @@
       <div>
         <h1 class="text-base font-semibold tracking-tight text-white font-mono">MyVPS</h1>
         <p class="text-xs text-slate-400 font-mono mt-0.5">
-          uptime: <span id="uptime-display" class="text-slate-300">--</span>
+          <span data-i18n="uptime_label">uptime:</span> <span id="uptime-display" class="text-slate-300">--</span>
         </p>
       </div>
     </div>
 
-    <!-- Status & Relógio -->
-    <div class="flex items-center gap-3 text-xs">
-      <div id="status-pill" class="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#13161c] border border-amber-500/20 text-amber-300 text-xs font-mono transition-colors">
+    <!-- Status, Relógio & Idioma Toggle -->
+    <div class="flex items-center gap-3 text-xs font-mono">
+      <div class="flex items-center bg-[#13161c] border border-[#1e222a] rounded-md p-0.5 text-xs">
+        <button id="lang-btn-en" type="button" class="px-2 py-0.5 rounded text-white bg-slate-800 transition-colors" title="English">EN</button>
+        <button id="lang-btn-pt" type="button" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition-colors" title="Português">PT</button>
+      </div>
+
+      <div id="status-pill" class="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#13161c] border border-amber-500/20 text-amber-300 text-xs transition-colors">
         <span id="status-indicator" class="relative flex h-2 w-2">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
           <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
         </span>
-        <span id="status-text">connecting</span>
+        <span id="status-text" data-i18n="status_connecting">connecting</span>
       </div>
-      <span id="last-update" class="text-slate-400 font-mono text-xs">--:--:--</span>
+      <span id="last-update" class="text-slate-400 text-xs">--:--:--</span>
     </div>
   </header>
 
@@ -109,7 +114,7 @@
             <div id="cpu-bar" class="h-1.5 rounded-full bg-emerald-400 transition-all duration-500" style="width: 0%"></div>
           </div>
           <div class="text-xs text-slate-400 border-t border-[#1e222a] pt-2 font-mono truncate" title="1m, 5m, 15m load average">
-            load average: <span id="cpu-load" class="text-slate-300">- / - / -</span>
+            <span data-i18n="load_avg_label">load average:</span> <span id="cpu-load" class="text-slate-300">- / - / -</span>
           </div>
         </div>
       </div>
@@ -118,7 +123,7 @@
       <div class="card p-5 flex flex-col justify-between">
         <div>
           <div class="flex items-center justify-between mb-3 text-xs font-mono">
-            <span class="text-slate-400 uppercase font-semibold">Memory</span>
+            <span data-i18n="memory_card_title" class="text-slate-400 uppercase font-semibold">Memory</span>
             <span id="ram-ratio" class="text-slate-400">0 / 0 GB</span>
           </div>
 
@@ -132,7 +137,7 @@
             <div id="ram-bar" class="h-1.5 rounded-full bg-emerald-400 transition-all duration-500" style="width: 0%"></div>
           </div>
           <div class="text-xs text-slate-400 border-t border-[#1e222a] pt-2 font-mono truncate">
-            swap: <span id="swap-info" class="text-slate-300">0.0 / 0.0 GB (0%)</span>
+            <span data-i18n="swap_label">swap:</span> <span id="swap-info" class="text-slate-300">0.0 / 0.0 GB (0%)</span>
           </div>
         </div>
       </div>
@@ -141,7 +146,7 @@
       <div class="card p-5 flex flex-col justify-between">
         <div>
           <div class="flex items-center justify-between mb-3 text-xs font-mono">
-            <span class="text-slate-400 uppercase font-semibold">Disk (/)</span>
+            <span data-i18n="disk_card_title" class="text-slate-400 uppercase font-semibold">Disk (/)</span>
             <span id="disk-ratio" class="text-slate-400">0 / 0 GB</span>
           </div>
 
@@ -155,7 +160,7 @@
             <div id="disk-bar" class="h-1.5 rounded-full bg-emerald-400 transition-all duration-500" style="width: 0%"></div>
           </div>
           <div class="text-xs text-slate-400 border-t border-[#1e222a] pt-2 font-mono truncate">
-            free: <span id="disk-free" class="text-slate-300">0.0 GB</span>
+            <span data-i18n="free_label">free:</span> <span id="disk-free" class="text-slate-300">0.0 GB</span>
           </div>
         </div>
       </div>
@@ -165,17 +170,17 @@
         <div>
           <div class="flex items-center justify-between mb-3 text-xs font-mono">
             <span class="text-slate-400 uppercase font-semibold">Docker</span>
-            <span id="docker-status-badge" class="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-800 text-slate-400 border border-slate-700">checking</span>
+            <span id="docker-status-badge" class="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-800 text-slate-400 border border-slate-700" data-i18n="checking">checking</span>
           </div>
 
           <div class="mb-4 flex items-baseline justify-between font-mono">
             <div>
               <span id="docker-running-count" class="text-3xl font-semibold tracking-tight text-white">0</span>
-              <span class="text-xs text-emerald-400 ml-1">running</span>
+              <span data-i18n="running" class="text-xs text-emerald-400 ml-1">running</span>
             </div>
             <div class="text-right">
               <span id="docker-stopped-count" class="text-xl font-medium text-slate-400">0</span>
-              <span class="text-xs text-slate-500 ml-1">stopped</span>
+              <span data-i18n="stopped" class="text-xs text-slate-500 ml-1">stopped</span>
             </div>
           </div>
         </div>
@@ -194,11 +199,11 @@
       <div class="card p-5 lg:col-span-2">
         <div class="flex items-center justify-between border-b border-[#1e222a] pb-3 mb-4 font-mono text-xs">
           <span class="text-slate-300 uppercase font-semibold">CPU Cores</span>
-          <span class="text-slate-500">realtime</span>
+          <span data-i18n="realtime" class="text-slate-500">realtime</span>
         </div>
         <div id="cores-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <!-- Renderizado dinamicamente via JS -->
-          <div class="text-xs text-slate-500 py-6 col-span-full text-center font-mono">waiting for metrics...</div>
+          <div data-i18n="waiting_metrics" class="text-xs text-slate-500 py-6 col-span-full text-center font-mono">waiting for metrics...</div>
         </div>
       </div>
 
@@ -212,7 +217,7 @@
           <!-- Interfaces de Rede -->
           <div class="space-y-2 mb-5">
             <div id="network-interfaces-list" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-              <div class="text-xs text-slate-500 py-2 text-center">no interfaces detected</div>
+              <div data-i18n="no_interfaces" class="text-xs text-slate-500 py-2 text-center">no interfaces detected</div>
             </div>
           </div>
 
@@ -220,11 +225,11 @@
           <div class="pt-3 border-t border-[#1e222a]">
             <div class="grid grid-cols-2 gap-2 text-xs">
               <div class="bg-[#171b23] p-2.5 rounded border border-[#202530]">
-                <span class="text-slate-500 block text-[11px]">read</span>
+                <span data-i18n="read" class="text-slate-500 block text-[11px]">read</span>
                 <span id="disk-read-mb" class="text-slate-200 font-medium text-sm mt-0.5 block">0.0 MB</span>
               </div>
               <div class="bg-[#171b23] p-2.5 rounded border border-[#202530]">
-                <span class="text-slate-500 block text-[11px]">write</span>
+                <span data-i18n="write" class="text-slate-500 block text-[11px]">write</span>
                 <span id="disk-write-mb" class="text-slate-200 font-medium text-sm mt-0.5 block">0.0 MB</span>
               </div>
             </div>
@@ -233,7 +238,7 @@
 
         <!-- Sessões ativas -->
         <div class="pt-3 mt-4 border-t border-[#1e222a] text-xs flex items-center justify-between text-slate-400">
-          <span>active sessions:</span>
+          <span data-i18n="active_sessions">active sessions:</span>
           <span id="users-count" class="text-slate-200 font-medium bg-[#171b23] px-2 py-0.5 rounded border border-[#202530]">0</span>
         </div>
       </div>
@@ -250,16 +255,16 @@
         <table class="w-full text-left text-xs text-slate-300 font-mono">
           <thead class="text-slate-500 uppercase text-[11px] border-b border-[#1e222a]">
             <tr>
-              <th scope="col" class="py-2.5 px-3 font-medium">NAME</th>
-              <th scope="col" class="py-2.5 px-3 font-medium">STATUS</th>
-              <th scope="col" class="py-2.5 px-3 font-medium">IMAGE</th>
-              <th scope="col" class="py-2.5 px-3 font-medium">CONTAINER ID</th>
-              <th scope="col" class="py-2.5 px-3 font-medium">PORTS</th>
+              <th scope="col" class="py-2.5 px-3 font-medium" data-i18n="th_name">NAME</th>
+              <th scope="col" class="py-2.5 px-3 font-medium" data-i18n="th_status">STATUS</th>
+              <th scope="col" class="py-2.5 px-3 font-medium" data-i18n="th_image">IMAGE</th>
+              <th scope="col" class="py-2.5 px-3 font-medium" data-i18n="th_container_id">CONTAINER ID</th>
+              <th scope="col" class="py-2.5 px-3 font-medium" data-i18n="th_ports">PORTS</th>
             </tr>
           </thead>
           <tbody id="containers-table-body" class="divide-y divide-[#1e222a]">
             <tr>
-              <td colspan="5" class="py-6 text-center text-slate-500 font-mono">No running containers or Docker daemon unreachable.</td>
+              <td colspan="5" class="py-6 text-center text-slate-500 font-mono" data-i18n="docker_unreachable">No running containers or Docker daemon unreachable.</td>
             </tr>
           </tbody>
         </table>
@@ -272,7 +277,7 @@
       <!-- Top CPU -->
       <div class="card p-5">
         <div class="flex items-center justify-between border-b border-[#1e222a] pb-3 mb-3 font-mono text-xs">
-          <span class="text-slate-300 uppercase font-semibold">Top Processes (CPU)</span>
+          <span class="text-slate-300 uppercase font-semibold" data-i18n="top_processes_cpu">Top Processes (CPU)</span>
           <span class="text-emerald-400 font-semibold">%CPU</span>
         </div>
         <div class="overflow-x-auto">
@@ -280,14 +285,14 @@
             <thead class="text-slate-500 uppercase text-[11px] border-b border-[#1e222a]">
               <tr>
                 <th scope="col" class="py-2 px-3 font-medium">PID</th>
-                <th scope="col" class="py-2 px-3 font-medium">COMMAND</th>
+                <th scope="col" class="py-2 px-3 font-medium" data-i18n="th_command">COMMAND</th>
                 <th scope="col" class="py-2 px-3 text-right font-medium">%CPU</th>
                 <th scope="col" class="py-2 px-3 text-right font-medium">%MEM</th>
               </tr>
             </thead>
             <tbody id="cpu-processes-body" class="divide-y divide-[#1e222a]">
               <tr>
-                <td colspan="4" class="py-6 text-center text-slate-500">waiting for processes...</td>
+                <td colspan="4" class="py-6 text-center text-slate-500" data-i18n="waiting_processes">waiting for processes...</td>
               </tr>
             </tbody>
           </table>
@@ -297,7 +302,7 @@
       <!-- Top RAM -->
       <div class="card p-5">
         <div class="flex items-center justify-between border-b border-[#1e222a] pb-3 mb-3 font-mono text-xs">
-          <span class="text-slate-300 uppercase font-semibold">Top Processes (Memory)</span>
+          <span class="text-slate-300 uppercase font-semibold" data-i18n="top_processes_memory">Top Processes (Memory)</span>
           <span class="text-blue-400 font-semibold">%MEM</span>
         </div>
         <div class="overflow-x-auto">
@@ -305,14 +310,14 @@
             <thead class="text-slate-500 uppercase text-[11px] border-b border-[#1e222a]">
               <tr>
                 <th scope="col" class="py-2 px-3 font-medium">PID</th>
-                <th scope="col" class="py-2 px-3 font-medium">COMMAND</th>
+                <th scope="col" class="py-2 px-3 font-medium" data-i18n="th_command">COMMAND</th>
                 <th scope="col" class="py-2 px-3 text-right font-medium">%MEM</th>
                 <th scope="col" class="py-2 px-3 text-right font-medium">%CPU</th>
               </tr>
             </thead>
             <tbody id="memory-processes-body" class="divide-y divide-[#1e222a]">
               <tr>
-                <td colspan="4" class="py-6 text-center text-slate-500">waiting for processes...</td>
+                <td colspan="4" class="py-6 text-center text-slate-500" data-i18n="waiting_processes">waiting for processes...</td>
               </tr>
             </tbody>
           </table>
@@ -323,6 +328,6 @@
 
   </main>
 
-  <script src="script.js?v=2.1"></script>
+  <script src="script.js?v=2.2"></script>
 </body>
 </html>
