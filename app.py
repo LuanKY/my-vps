@@ -26,6 +26,60 @@ def bytes_to_mb(num_bytes: int) -> float:
     return round(num_bytes / (1024 ** 2), 2)
 
 
+def get_network_interfaces():
+    """Collects network interfaces, attempting to read host /proc/net/dev if mounted in container, with psutil fallback."""
+    host_net_path = "/host/proc/net/dev"
+    if os.path.exists(host_net_path):
+        try:
+            interfaces = []
+            with open(host_net_path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+            for line in lines[2:]:
+                parts = line.strip().split(":")
+                if len(parts) != 2:
+                    continue
+                iface_name = parts[0].strip()
+                data = parts[1].split()
+                if len(data) >= 10:
+                    rx_bytes = int(data[0])
+                    rx_packets = int(data[1])
+                    tx_bytes = int(data[8])
+                    tx_packets = int(data[9])
+                    interfaces.append({
+                        "interface": iface_name,
+                        "bytes_sent_mb": bytes_to_mb(tx_bytes),
+                        "bytes_recv_mb": bytes_to_mb(rx_bytes),
+                        "packets_sent": tx_packets,
+                        "packets_recv": rx_packets,
+                        "raw_bytes": {
+                            "bytes_sent": tx_bytes,
+                            "bytes_recv": rx_bytes
+                        }
+                    })
+            if interfaces:
+                return interfaces
+        except Exception:
+            pass
+
+    interfaces = []
+    try:
+        for iface_name, net_stat in psutil.net_io_counters(pernic=True).items():
+            interfaces.append({
+                "interface": iface_name,
+                "bytes_sent_mb": bytes_to_mb(net_stat.bytes_sent),
+                "bytes_recv_mb": bytes_to_mb(net_stat.bytes_recv),
+                "packets_sent": net_stat.packets_sent,
+                "packets_recv": net_stat.packets_recv,
+                "raw_bytes": {
+                    "bytes_sent": net_stat.bytes_sent,
+                    "bytes_recv": net_stat.bytes_recv
+                }
+            })
+    except Exception:
+        interfaces = []
+    return interfaces
+
+
 def get_docker_overview():
     """Collects Docker daemon status and a structured container summary for frontend cards."""
     try:
@@ -271,22 +325,7 @@ def get_computer_data():
     top_cpu_processes = sorted(all_processes, key=lambda x: x["cpu_percent"], reverse=True)[:10]
 
     # 11. Network Traffic I/O formatted as an array for easy frontend mapping
-    network_interfaces_list = []
-    try:
-        for iface_name, net_stat in psutil.net_io_counters(pernic=True).items():
-            network_interfaces_list.append({
-                "interface": iface_name,
-                "bytes_sent_mb": bytes_to_mb(net_stat.bytes_sent),
-                "bytes_recv_mb": bytes_to_mb(net_stat.bytes_recv),
-                "packets_sent": net_stat.packets_sent,
-                "packets_recv": net_stat.packets_recv,
-                "raw_bytes": {
-                    "bytes_sent": net_stat.bytes_sent,
-                    "bytes_recv": net_stat.bytes_recv
-                }
-            })
-    except Exception:
-        network_interfaces_list = []
+    network_interfaces_list = get_network_interfaces()
 
     # 12. Active Logged-in Users with ISO timestamps
     logged_in_users = []

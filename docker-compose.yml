@@ -10,6 +10,8 @@ services:
       - proxy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/utmp:/var/run/utmp:ro
+      - /proc/net/dev:/host/proc/net/dev:ro
 networks:
     proxy:
       external: true

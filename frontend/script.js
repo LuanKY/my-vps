@@ -42,6 +42,9 @@ const translations = {
     th_container_id: "CONTAINER ID",
     th_ports: "PORTS",
     th_command: "COMMAND",
+    cpu_cores_title: "CPU CORES",
+    network_disk_title: "NETWORK & DISK I/O",
+    docker_table_title: "DOCKER CONTAINERS",
     docker_unreachable: "Docker daemon unreachable or inactive.",
     no_running_containers: "No running containers.",
     top_processes_cpu: "Top Processes (CPU)",
@@ -80,6 +83,9 @@ const translations = {
     th_container_id: "CONTAINER ID",
     th_ports: "PORTAS",
     th_command: "COMANDO",
+    cpu_cores_title: "NÚCLEOS DA CPU",
+    network_disk_title: "REDE E I/O DE DISCO",
+    docker_table_title: "CONTÊINERES DOCKER",
     docker_unreachable: "Daemon Docker inacessível ou inativo.",
     no_running_containers: "Nenhum contêiner em execução.",
     top_processes_cpu: "Principais Processos (CPU)",
@@ -462,10 +468,11 @@ function renderCpuCores(cores) {
     const displayVal = val !== null ? `${val.toFixed(1)}%` : "--";
     const widthVal = val !== null ? Math.min(100, Math.max(0, val)) : 0;
 
+    const coreLabel = currentLang === "pt" ? `núcleo ${idx}` : `core ${idx}`;
     return `
       <div class="bg-[#171b23] p-3 rounded-lg border border-[#202530] flex flex-col justify-between font-mono">
         <div class="flex items-center justify-between text-xs mb-2">
-          <span class="text-slate-400">core ${idx}</span>
+          <span class="text-slate-400">${coreLabel}</span>
           <span class="${colors.text}">${displayVal}</span>
         </div>
         <div class="w-full bg-[#1e222a] rounded-full h-1 overflow-hidden">
