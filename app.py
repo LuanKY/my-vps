@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import datetime
+import json
 import os
 import secrets
 import time
@@ -9,7 +10,7 @@ from typing import Optional
 import docker
 import psutil
 from fastapi import FastAPI, Query, Request, Response, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from schemas import HealthResponse, SystemMetricsResponse
@@ -23,6 +24,20 @@ UPDATE_INTERVAL = float(os.getenv("UPDATE_INTERVAL", "3.0"))
 AUTH_USERNAME = os.getenv("AUTH_USERNAME", "").strip()
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "").strip()
 AUTH_ENABLED = bool(AUTH_USERNAME and AUTH_PASSWORD)
+SESSION_TOKENS = set()
+
+PUBLIC_PATHS = {
+    "/health",
+    "/favicon.ico",
+    "/manifest.json",
+    "/manifest.webmanifest",
+    "/sw.js",
+    "/dashboard/manifest.json",
+    "/dashboard/manifest.webmanifest",
+    "/dashboard/sw.js",
+    "/dashboard/favicon.ico",
+    "/api/config",
+}
 
 
 def verify_basic_credentials(auth_header: Optional[str]) -> bool:
@@ -46,6 +61,7 @@ psutil.cpu_percent(interval=None, percpu=True)
 # ==============================================================================
 # Helper Functions for Unit Conversion
 # ==============================================================================
+
 
 def bytes_to_gb(num_bytes: int) -> float:
     """Converts bytes to Gigabytes rounded to two decimal places."""
@@ -185,18 +201,38 @@ uptime, Docker container summary, top CPU/memory processes, and active user sess
 if AUTH_ENABLED:
     @app.middleware("http")
     async def basic_auth_middleware(request: Request, call_next):
-        # Health check endpoint remains accessible without auth for monitors/uptime checks
-        if request.url.path == "/health":
+        if request.url.path in PUBLIC_PATHS or request.url.path.startswith("/dashboard/icons/"):
+            return await call_next(request)
+
+        session_token = request.cookies.get("myvps_session")
+
+        if session_token and session_token in SESSION_TOKENS:
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization")
+
         if not verify_basic_credentials(auth_header):
             return Response(
                 content="Unauthorized",
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 headers={"WWW-Authenticate": f'Basic realm="{SERVER_NAME}"'}
             )
-        return await call_next(request)
+
+        session_token = secrets.token_urlsafe(32)
+        SESSION_TOKENS.add(session_token)
+
+        response = await call_next(request)
+
+        response.set_cookie(
+            key="myvps_session",
+            value=session_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=86400
+        )
+
+        return response
 
 
 # ==============================================================================
@@ -409,7 +445,8 @@ def get_computer_data():
         "top_cpu_processes": top_cpu_processes,
         "top_memory_processes": top_memory_processes,
         "logged_in_users": logged_in_users,
-        "server_name": SERVER_NAME
+        "server_name": SERVER_NAME,
+        "update_interval": UPDATE_INTERVAL
     }
 
 
@@ -426,10 +463,15 @@ async def websocket_system_metrics(
     if AUTH_ENABLED:
         auth_header = websocket.headers.get("authorization")
         is_authenticated = verify_basic_credentials(auth_header)
+
         if not is_authenticated and auth:
             is_authenticated = verify_basic_credentials(f"Basic {auth}")
+
         if not is_authenticated:
-            # Policy violation in WebSocket RFC 6455
+            session_token = websocket.cookies.get("myvps_session")
+            is_authenticated = bool(session_token and session_token in SESSION_TOKENS)
+
+        if not is_authenticated:
             await websocket.close(code=1008)
             return
 
@@ -452,15 +494,107 @@ async def websocket_system_metrics(
 
 
 # ==============================================================================
-# Static Frontend Files Mount (Single-port deployment)
+# Static Frontend Files Mount (Single-port deployment) & PWA Endpoints
 # ==============================================================================
 
 frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
+
+
+@app.get("/api/config", include_in_schema=False)
+def get_config():
+    """Returns server runtime configuration metadata."""
+    return {
+        "server_name": SERVER_NAME,
+        "update_interval": UPDATE_INTERVAL
+    }
+
+
+def build_manifest_payload():
+    short_name = SERVER_NAME if len(SERVER_NAME) <= 12 else SERVER_NAME[:12].strip()
+    return {
+        "name": SERVER_NAME,
+        "short_name": short_name,
+        "description": f"{SERVER_NAME} - Real-time VPS Monitoring & Telemetry Dashboard",
+        "start_url": "/dashboard/",
+        "scope": "/dashboard/",
+        "display": "standalone",
+        "orientation": "any",
+        "background_color": "#0b0d11",
+        "theme_color": "#0b0d11",
+        "icons": [
+            {
+                "src": "/dashboard/icons/icon-192x192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any"
+            },
+            {
+                "src": "/dashboard/icons/icon-512x512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any"
+            },
+            {
+                "src": "/dashboard/icons/maskable-icon-192x192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "maskable"
+            },
+            {
+                "src": "/dashboard/icons/maskable-icon-512x512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "maskable"
+            }
+        ],
+        "categories": ["utilities", "productivity", "developer"]
+    }
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+@app.head("/manifest.webmanifest", include_in_schema=False)
+@app.get("/manifest.json", include_in_schema=False)
+@app.head("/manifest.json", include_in_schema=False)
+@app.get("/dashboard/manifest.webmanifest", include_in_schema=False)
+@app.head("/dashboard/manifest.webmanifest", include_in_schema=False)
+@app.get("/dashboard/manifest.json", include_in_schema=False)
+@app.head("/dashboard/manifest.json", include_in_schema=False)
+def get_pwa_manifest():
+    manifest_data = build_manifest_payload()
+    return Response(
+        content=json.dumps(manifest_data, ensure_ascii=False),
+        media_type="application/manifest+json"
+    )
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.head("/favicon.ico", include_in_schema=False)
+def get_favicon_root():
+    fav_path = os.path.join(frontend_dir, "icons", "favicon.ico")
+    if os.path.exists(fav_path):
+        return FileResponse(fav_path, media_type="image/x-icon")
+    return Response(status_code=404)
+
+
+@app.get("/sw.js", include_in_schema=False)
+@app.head("/sw.js", include_in_schema=False)
+def get_service_worker_root():
+    sw_path = os.path.join(frontend_dir, "sw.js")
+    if os.path.exists(sw_path):
+        return FileResponse(
+            sw_path,
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/"}
+        )
+    return Response(status_code=404)
+
+
+
 if os.path.exists(frontend_dir):
     app.mount("/dashboard", StaticFiles(directory=frontend_dir, html=True), name="frontend_dashboard")
-    # Redireciona a raiz "/" para o dashboard se chamado via navegador (HTML)
+
     @app.get("/ui", include_in_schema=False)
     def redirect_to_dashboard():
-        from fastapi.responses import RedirectResponse
         return RedirectResponse(url="/dashboard/")
+
 

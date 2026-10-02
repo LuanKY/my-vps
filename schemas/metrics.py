@@ -428,4 +428,9 @@ class SystemMetricsResponse(BaseModel):
         description="Custom display name or hostname for the VPS instance",
         examples=["Production VPS"]
     )
+    update_interval: float = Field(
+        default=3.0,
+        description="Configured WebSocket update interval in seconds",
+        examples=[3.0]
+    )
 

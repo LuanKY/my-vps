@@ -9,6 +9,11 @@ let reconnectTimer = null;
 let lastDashboardData = null;
 let currentConnectionState = "connecting";
 
+// Sincronização do contador de próxima atualização (derivado de timestamps sem drift)
+let updateIntervalSeconds = 3.0;
+let lastUpdateMonotonic = null;
+let countdownTimerId = null;
+
 const translations = {
   en: {
     uptime_label: "uptime:",
@@ -16,6 +21,8 @@ const translations = {
     status_connected: "connected",
     status_disconnected: "disconnected",
     load_avg_label: "load average:",
+    load_avg_tooltip: "1m, 5m, 15m load average",
+    next_update_title: "Next update in",
     memory_card_title: "MEMORY",
     swap_label: "swap:",
     disk_card_title: "DISK (/)",
@@ -62,7 +69,9 @@ const translations = {
     status_connecting: "conectando",
     status_connected: "conectado",
     status_disconnected: "desconectado",
-    load_avg_label: "load average:",
+    load_avg_label: "Média de carga:",
+    load_avg_tooltip: "Média de carga em 1m, 5m, 15m",
+    next_update_title: "Próxima atualização em",
     memory_card_title: "MEMÓRIA",
     swap_label: "swap:",
     disk_card_title: "DISCO (/)",
@@ -106,7 +115,8 @@ const translations = {
   }
 };
 
-let currentLang = localStorage.getItem("myvps_lang") || "en";
+let currentLang = localStorage.getItem("myvps_lang") || ((typeof navigator !== "undefined" && navigator.language && navigator.language.startsWith("pt")) ? "pt" : "en");
+
 
 function formatContainerStatus(statusStr, stateStr) {
   const raw = (statusStr || stateStr || "").trim();
@@ -190,6 +200,16 @@ function updateLanguageUI() {
     }
   });
 
+  // Atualiza tooltips traduzidos
+  const cpuLoadContainer = document.getElementById("cpu-load-container");
+  if (cpuLoadContainer) {
+    cpuLoadContainer.title = t("load_avg_tooltip");
+  }
+  const nextUpdateCounterEl = document.getElementById("next-update-counter");
+  if (nextUpdateCounterEl) {
+    nextUpdateCounterEl.title = t("next_update_title");
+  }
+
   // Atualiza conexão e dados atuais se houver
   updateStatus(currentConnectionState);
   if (lastDashboardData) {
@@ -202,6 +222,7 @@ const statusPill = document.getElementById("status-pill");
 const statusIndicator = document.getElementById("status-indicator");
 const statusText = document.getElementById("status-text");
 const lastUpdate = document.getElementById("last-update");
+const nextUpdateCounter = document.getElementById("next-update-counter");
 const uptimeDisplay = document.getElementById("uptime-display");
 
 // Helper: Cores de status dev/sysadmin
@@ -216,6 +237,42 @@ function getStatusColor(percent) {
     return { text: "text-amber-300", bar: "bg-amber-400" };
   }
   return { text: "text-white", bar: "bg-emerald-400" };
+}
+
+// ==============================================================================
+// Temporizador Preciso de Próxima Atualização
+// Derivado monotonicamente de timestamps sem drift acumulativo e sincronizado
+// com UPDATE_INTERVAL real da VPS.
+// ==============================================================================
+
+function tickCountdown() {
+  if (!nextUpdateCounter) return;
+
+  if (currentConnectionState !== "connected" || lastUpdateMonotonic === null) {
+    nextUpdateCounter.textContent = "--";
+    return;
+  }
+
+  const elapsed = (performance.now() - lastUpdateMonotonic) / 1000;
+  const remaining = Math.max(0, updateIntervalSeconds - elapsed);
+  nextUpdateCounter.textContent = `${remaining.toFixed(1)}s`;
+}
+
+function startCountdownTimer() {
+  if (countdownTimerId) {
+    clearInterval(countdownTimerId);
+  }
+  countdownTimerId = setInterval(tickCountdown, 100);
+}
+
+function stopCountdownTimer() {
+  if (countdownTimerId) {
+    clearInterval(countdownTimerId);
+    countdownTimerId = null;
+  }
+  if (nextUpdateCounter) {
+    nextUpdateCounter.textContent = "--";
+  }
 }
 
 // Conectar ao WebSocket
@@ -238,8 +295,16 @@ function connectWebSocket() {
   socket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      if (data.update_interval && typeof data.update_interval === "number" && data.update_interval > 0) {
+        updateIntervalSeconds = data.update_interval;
+      }
+      lastUpdateMonotonic = performance.now();
       lastDashboardData = data;
       renderDashboard(data);
+      tickCountdown();
+      if (!countdownTimerId) {
+        startCountdownTimer();
+      }
     } catch (err) {
       console.error("JSON parse error:", err);
     }
@@ -247,17 +312,20 @@ function connectWebSocket() {
 
   socket.onclose = () => {
     updateStatus("disconnected");
+    stopCountdownTimer();
     scheduleReconnect();
   };
 
   socket.onerror = (error) => {
     console.error("WebSocket error:", error);
     updateStatus("disconnected");
+    stopCountdownTimer();
   };
 }
 
 function scheduleReconnect() {
   clearTimeout(reconnectTimer);
+  stopCountdownTimer();
   reconnectTimer = setTimeout(() => {
     console.log("Reconnecting WebSocket...");
     connectWebSocket();
@@ -297,7 +365,7 @@ function updateStatus(state) {
 function renderDashboard(data) {
   if (!data) return;
 
-  // 0. Server Name (Aba do navegador e cabeçalho)
+  // 0. Server Name (Aba do navegador, cabeçalho e metadados PWA)
   if (data.server_name) {
     const serverNameEl = document.getElementById("server-name-display");
     if (serverNameEl && serverNameEl.textContent !== data.server_name) {
@@ -306,7 +374,12 @@ function renderDashboard(data) {
     if (document.title !== data.server_name) {
       document.title = data.server_name;
     }
+    const metaApple = document.getElementById("meta-apple-title");
+    if (metaApple) metaApple.content = data.server_name;
+    const metaApp = document.getElementById("meta-app-name");
+    if (metaApp) metaApp.content = data.server_name;
   }
+
 
   // Update simple timestamp (no label)
   const now = new Date();
@@ -674,4 +747,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Conecta WebSocket
   connectWebSocket();
+
+  // Registra Service Worker para PWA
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("sw.js", { scope: "./" })
+        .then((reg) => {
+          console.log("Service Worker registered with scope:", reg.scope);
+        })
+        .catch((err) => {
+          console.warn("Service Worker registration failed:", err);
+        });
+    });
+  }
 });
+
