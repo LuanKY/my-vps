@@ -1,9 +1,13 @@
-name: Deploy VPS
+name: Deploy MyVPS
 
 on:
   push:
     branches:
       - main
+
+concurrency:
+  group: deploy-my-vps
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -18,22 +22,4 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            mkdir -p ~/projects
-
-            REPO_NAME="${{ github.event.repository.name }}"
-            TARGET_DIR="$HOME/projects/$REPO_NAME"
-
-            if [ ! -d "$TARGET_DIR/.git" ]; then
-              cd ~/projects
-              git clone https://github.com/${{ github.repository }}.git "$REPO_NAME"
-            fi
-
-            cd "$TARGET_DIR"
-            git pull origin main
-
-            if [ ! -f .env ] && [ -f .env.example ]; then
-              cp .env.example .env
-            fi
-
-            docker compose up -d --build
-            docker image prune -f
+            bash -c "cd /opt/my-vps && git fetch origin main && git checkout origin/main -- deploy.sh && bash /opt/my-vps/deploy.sh"
