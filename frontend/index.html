@@ -7,6 +7,20 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>MyVPS</title>
+
+  <!-- PWA & Favicon Metadata -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+  <link rel="shortcut icon" href="icons/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MyVPS" id="meta-apple-title">
+  <meta name="application-name" content="MyVPS" id="meta-app-name">
+  <meta name="theme-color" content="#0b0d11">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -63,7 +77,8 @@
 
   <!-- Header -->
   <header class="border-b border-[#1e222a] bg-[#0b0d11]/90 backdrop-blur sticky top-0 z-40 px-6 lg:px-10 py-3.5 flex flex-wrap items-center justify-between gap-4">
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-3">
+      <img src="icons/favicon.svg" alt="Server Logo" class="w-8 h-8 rounded-lg shadow-sm" width="32" height="32" />
       <div>
         <h1 id="server-name-display" class="text-base font-semibold tracking-tight text-white font-mono">MyVPS</h1>
         <p class="text-xs text-slate-400 font-mono mt-0.5">
@@ -72,7 +87,7 @@
       </div>
     </div>
 
-    <!-- Status, Relógio & Idioma Toggle -->
+    <!-- Status, Relógio, Próxima Atualização & Idioma Toggle -->
     <div class="flex items-center gap-3 text-xs font-mono">
       <div class="flex items-center bg-[#13161c] border border-[#1e222a] rounded-md p-0.5 text-xs">
         <button id="lang-btn-en" type="button" class="px-2 py-0.5 rounded text-white bg-slate-800 transition-colors" title="English">EN</button>
@@ -86,7 +101,13 @@
         </span>
         <span id="status-text" data-i18n="status_connecting">connecting</span>
       </div>
-      <span id="last-update" class="text-slate-400 text-xs">--:--:--</span>
+
+      <!-- Relógio & Contador de Próxima Atualização -->
+      <div class="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#13161c] border border-[#1e222a] text-slate-400">
+        <span id="last-update" title="Última atualização / Last update">--:--:--</span>
+        <span class="text-slate-600">/</span>
+        <span id="next-update-counter" class="text-emerald-400 font-semibold" title="Próxima atualização / Next update">3.0s</span>
+      </div>
     </div>
   </header>
 
@@ -113,9 +134,11 @@
           <div class="w-full bg-[#1e222a] rounded-full h-1.5 overflow-hidden">
             <div id="cpu-bar" class="h-1.5 rounded-full bg-emerald-400 transition-all duration-500" style="width: 0%"></div>
           </div>
-          <div class="text-xs text-slate-400 border-t border-[#1e222a] pt-2 font-mono truncate" title="1m, 5m, 15m load average">
-            <span data-i18n="load_avg_label">load average:</span> <span id="cpu-load" class="text-slate-300">- / - / -</span>
+          <div id="cpu-load-container" class="text-xs text-slate-400 border-t border-[#1e222a] pt-2 font-mono truncate" title="Média de carga em 1m, 5m, 15m">
+            <span data-i18n="load_avg_label">Média de carga:</span> <span id="cpu-load" class="text-slate-300">- / - / -</span>
           </div>
+
+
         </div>
       </div>
 
@@ -328,6 +351,7 @@
 
   </main>
 
-  <script src="script.js?v=2.2"></script>
+  <script src="script.js?v=3.0"></script>
 </body>
+
 </html>
