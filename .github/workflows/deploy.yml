@@ -3,7 +3,7 @@ name: Deploy MyVPS
 on:
   push:
     branches:
-      - main
+      - deploy
   workflow_dispatch:
 
 concurrency:
@@ -23,4 +23,4 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            bash -c "cd /opt/my-vps && git fetch origin main && git checkout origin/main -- deploy.sh && bash /opt/my-vps/deploy.sh"
+            bash -c "cd /opt/my-vps && git fetch origin deploy && git checkout origin/deploy -- deploy.sh && bash /opt/my-vps/deploy.sh"

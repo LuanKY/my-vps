@@ -20,7 +20,7 @@ rollback() {
 
 trap rollback ERR
 
-git reset --hard origin/main
+git reset --hard origin/deploy
 
 if [ ! -f .env ] && [ -f .env.example ]; then
   cp .env.example .env
